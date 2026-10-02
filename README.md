@@ -13,7 +13,7 @@ prices or the system stats on an e-ink display. The web page shows exactly what'
 on the panel, previews your changes before you send them, and works from any
 phone or laptop on your network.
 
-Works with the Waveshare **2.13"** (V3/V4), **2.7"** (V1/V2, with four keys)
+Works with Waveshare **2.13"** (V3/V4), **2.7"** (V1/V2, with four keys)
 and **3.7"** e-Paper HATs, and the PiSugar **Whisplay** HAT (a colour LCD
 with a speaker, microphones, a button and an LED). Every screen has a layout
 for each size.
