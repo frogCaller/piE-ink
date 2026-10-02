@@ -4,8 +4,8 @@ A Raspberry Pi with a small e-ink screen, controlled from your phone.
 
 <p>
   <img src="docs/pie-ink.jpg" height="260">
-  <img src="docs/pie-ink2.jpg" height="260">
   <img src="docs/pie-ink3.jpg" height="260">
+  <img src="docs/pie-ink4.jpeg" height="260">
 </p>
 
 Display the time, weather, message, sketch, book, camera feed, crypto
@@ -25,6 +25,7 @@ screen, setting and button.
 
 - A Raspberry Pi (Zero 2 W through Pi 5) and a [micro SD card](https://amzn.to/4hEMYF4)
 - [2.13" e-Paper HAT](https://amzn.to/4zeRSzU) (V3 or V4) | 2.7" e-Paper HAT (V2 recommended) | 3.7" e-Paper HAT,
+- [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) (as a second)
 - [GPIO extender](https://amzn.to/3VeFst4)
 - [GPIO splitter](https://amzn.to/3TdY9MU)
 
@@ -32,7 +33,6 @@ Optional:
 - [UPS HAT](https://amzn.to/4yvY6LE)
 - [Waveshare USB Hat](https://amzn.to/4j0LMye)
 - [USB GPS receiver](https://amzn.to/4rMy5oP)
-- [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) as a second, color screen
 - Pi camera or USB webcam
 - USB speaker
 - USB microphone
