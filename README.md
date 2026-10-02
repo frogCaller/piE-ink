@@ -1,6 +1,6 @@
 # PiE-ink
 
-A Raspberry Pi with a small e-ink screen, controlled from your phone.
+A Raspberry Pi desk pet that keeps me posted and comments throughout the day. Inspired by pwnagotchi.
 
 <p>
   <img src="docs/pie-ink.jpg" height="260">
