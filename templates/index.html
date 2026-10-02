@@ -1,0 +1,1523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>PiE-ink</title>
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23272c31'/%3E%3Crect x='6' y='9' width='20' height='14' rx='1.5' fill='%23f6f7f4'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<div class="deck" id="deck">
+  <header class="top">
+    <h1 class="wordmark"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M6 9.5h12M6 12.5h8"/></svg>PiE-ink</h1>
+    <span class="host" id="live-text"></span>
+    <button class="theme-btn" id="chat-show" aria-label="Show the conversation" title="Show the conversation">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4v-4H4z"/></svg>
+    </button>
+    <button class="theme-btn corner" id="settings-btn" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" class="cog"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+  </header>
+
+  <div class="screen">
+    <div class="bezel" id="bezel">
+      <img id="preview" class="paper" width="250" height="122" alt="What the e-ink screen is showing">
+      <span class="draft-tag" id="draft-tag" hidden>draft</span>
+      <div class="status-row">
+        <span class="on-screen"><span class="on-screen-label">on screen</span> <b id="showing">—</b></span>
+        <span class="spacer"></span>
+        <button class="ghost chin" id="btn-rotate" title="Turn the picture round on the screen"><svg viewBox="0 0 20 20"><path d="M10 3.5a6.5 6.5 0 1 1-6.2 4.5"/><path d="M3.5 3v5h5"/></svg>Rotate</button>
+        <button class="ghost chin" id="btn-refresh" title="Full refresh to clear ghosting"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg>Refresh</button>
+        <button class="ghost chin" id="btn-off" title="Blank the screen"><svg viewBox="0 0 20 20"><path d="M10 3v7"/><path d="M6 5.5a6 6 0 1 0 8 0"/></svg>Off</button>
+      </div>
+    </div>
+
+    <div class="action-row" id="action-home"><button class="primary action" id="action">Show clock</button></div>
+  </div>
+
+  <nav class="tabs" id="tabs" aria-label="Modes">
+    <button data-tab="clock" data-mode="clock" class="active" title="Clock" aria-label="Clock"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2"/></svg><span>Clock</span></button>
+    <button data-tab="weather" data-mode="weather" title="Weather" aria-label="Weather"><svg viewBox="0 0 20 20"><path d="M6 15h9a3 3 0 0 0 .5-6 4.5 4.5 0 0 0-8.7-1A3.5 3.5 0 0 0 6 15z"/></svg><span>Weather</span></button>
+    <button data-tab="map" data-mode="map" title="Map" aria-label="Map"><svg viewBox="0 0 20 20"><path d="M10 18s-5.5-5.2-5.5-9.5a5.5 5.5 0 0 1 11 0C15.5 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg><span>Map</span></button>
+    <button data-tab="message" data-mode="message" title="Message" aria-label="Message"><svg viewBox="0 0 20 20"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg><span>Message</span></button>
+    <button data-tab="draw" data-mode="image" title="Draw" aria-label="Draw"><svg viewBox="0 0 20 20"><path d="M3 17l1-4L14 3l3 3-10 10-4 1zM12 5l3 3"/></svg><span>Draw</span></button>
+    <button data-tab="read" data-mode="reader" title="Read" aria-label="Read"><svg viewBox="0 0 20 20"><path d="M3 4h5.5a2 2 0 0 1 2 2v10a2 2 0 0 0-2-2H3zM17 4h-5.5a2 2 0 0 0-2 2v10a2 2 0 0 1 2-2H17z"/></svg><span>Read</span></button>
+    <button data-tab="camera" data-mode="camera" title="Camera" aria-label="Camera"><svg viewBox="0 0 20 20"><path d="M3 7h3l1.5-2h5L14 7h3v9H3z"/><circle cx="10" cy="11.5" r="2.8"/></svg><span>Camera</span></button>
+    <button data-tab="music" data-mode="music" title="Music" aria-label="Music"><svg viewBox="0 0 20 20"><path d="M7 15V4l9-1.5V13"/><circle cx="5" cy="15.5" r="2.2"/><circle cx="14" cy="13.5" r="2.2"/></svg><span>Music</span></button>
+    <button data-tab="crypto" data-mode="crypto" title="Crypto" aria-label="Crypto"><svg viewBox="0 0 20 20"><path d="M3 14l4-5 3 3 4-6 3 4"/><path d="M3 17h14"/></svg><span>Crypto</span></button>
+    <button data-tab="system" data-mode="system" title="System" aria-label="System"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2"/><rect x="7" y="7" width="6" height="6"/><path d="M8 3V1M12 3V1M8 19v-2M12 19v-2M3 8H1M3 12H1M19 8h-2M19 12h-2"/></svg><span>System</span></button>
+  </nav>
+</div>
+
+<aside class="rail" id="rail" hidden></aside>
+
+<main class="controls">
+
+  <!-- Clock -->
+  <section class="tab card" data-tab="clock">
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2"/></svg>
+      <div><h2>Clock</h2></div>
+    </header>
+    <div class="group">
+      <div class="field-row">
+        <label class="field">
+          <span>Format</span>
+          <div class="segmented" data-setting="clock.format">
+            <button data-value="12">12h</button><button data-value="24">24h</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Font</span>
+          <select class="font-select" data-setting="clock.font"></select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Size <output id="clock-size-out"></output></span>
+        <input type="range" min="12" max="80" data-setting="clock.size">
+      </label>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="clock.show_seconds"><span>Seconds</span></label>
+        <label class="switch"><input type="checkbox" data-setting="clock.show_date"><span>Date</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- Weather -->
+  <section class="tab card" data-tab="weather" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M6 15h9a3 3 0 0 0 .5-6 4.5 4.5 0 0 0-8.7-1A3.5 3.5 0 0 0 6 15z"/></svg>
+      <div><h2>Weather</h2></div>
+    </header>
+    <div class="group">
+      <div class="wx-now" id="wx-now" hidden>
+        <b id="wx-temp">—</b>
+        <span><span id="wx-cond">—</span><br><small id="wx-detail"></small></span>
+      </div>
+      <label class="field">
+        <span>Location <output id="wx-place"></output></span>
+        <div class="key-row">
+          <div class="search-wrap">
+            <input type="search" id="wx-search" placeholder="Found by itself — or type a town…" autocomplete="off">
+            <ul id="wx-results" class="results" hidden></ul>
+          </div>
+          <button type="button" class="ghost" id="wx-locate" title="Where the GPS says, or, without a fix, where the Pi's internet address says">Find me</button>
+        </div>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Units</span>
+          <div class="segmented" data-setting="weather.units">
+            <button data-value="F">°F</button><button data-value="C">°C</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Refresh every <output id="wx-refresh-out"></output></span>
+          <input type="range" min="5" max="60" step="5" data-setting="weather.refresh_minutes">
+        </label>
+      </div>
+    </div>
+    <div class="group">
+      <span class="group-label">GPS receiver</span>
+      <p class="hint">A USB GPS plugged into the Pi — a u-blox 7 dongle, or anything that talks NMEA — is used the moment
+      it's plugged in. It needs a view of the sky (a window sill will do) and a minute or two to find satellites from cold.</p>
+      <div class="field-row">
+        <label class="field">
+          <span>Use it</span>
+          <div class="segmented" data-setting="gps.enabled">
+            <button data-value="auto" title="Whenever a receiver is plugged in">Auto</button><button data-value="on" title="And say so when there isn't one">On</button><button data-value="off">Off</button>
+          </div>
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="gps.set_weather"><span>Move the weather to wherever it is</span></label>
+        <label class="switch"><input type="checkbox" data-setting="journey.enabled"><span>Keep a journey log (the Map tab)</span></label>
+      </div>
+      <div class="draw-actions">
+        <span class="hint" id="gps-note">Off.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="gps-why" title="Check the USB bus, the serial ports, gpsd and ModemManager, listen to the receiver, and say what is wrong">Why not working?</button>
+        <button class="ghost" id="gps-show">Show the GPS screen</button>
+      </div>
+      <pre class="log" id="gps-probe" hidden></pre>
+    </div>
+  </section>
+
+  <section class="tab card" data-tab="map" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M10 18s-5.5-5.2-5.5-9.5a5.5 5.5 0 0 1 11 0C15.5 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg>
+      <div><h2>Map</h2></div>
+    </header>
+    <div class="group">
+      <div class="map-wrap">
+        <div id="map" class="map"></div>
+        <button class="map-btn" id="map-centre" title="Centre on the Pi" aria-label="Centre on the Pi"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4.5"/><path d="M10 2v3.5M10 14.5V18M2 10h3.5M14.5 10H18"/></svg></button>
+        <span class="map-badge" id="map-badge">…</span>
+      </div>
+      <dl class="stats map-stats" id="map-stats"></dl>
+      <p class="hint" id="map-note"></p>
+      <div class="draw-actions journey-row">
+        <label class="switch"><input type="checkbox" id="journey-show" checked><span>Journey</span></label>
+        <select class="compact-select" id="journey-day" title="Which day"></select>
+        <span class="spacer"></span>
+        <button class="ghost" id="journey-forget" title="Delete this day's track">Forget this day</button>
+      </div>
+      <p class="hint" id="journey-note"></p>
+    </div>
+    <div class="group">
+      <span class="group-label">On the panel</span>
+      <div class="field-row">
+        <label class="field">
+          <span>Zoom <output id="map-zoom-out"></output></span>
+          <input type="range" min="8" max="18" data-setting="map.zoom">
+        </label>
+        <label class="field">
+          <span>Style</span>
+          <div class="segmented" data-setting="map.style">
+            <button data-value="lines">Lines</button><button data-value="shaded">Shaded</button>
+          </div>
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="map.friends"><span>Friends' Pis on it</span></label>
+        <label class="switch"><input type="checkbox" data-setting="map.journey"><span>Today's trail on it</span></label>
+      </div>
+      <div class="draw-actions">
+        <span class="hint" id="map-cache">…</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="map-prefetch">Fetch the tiles now</button>
+      </div>
+      <p class="hint">Map data © OpenStreetMap contributors. The Pi keeps the tiles it has fetched for a week, so a place it
+      has shown stays on the panel without the network.</p>
+    </div>
+  </section>
+
+  <!-- Calendar -->
+  <!-- Music -->
+  <section class="tab card" data-tab="music" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M7 15V4l9-1.5V13"/><circle cx="5" cy="15.5" r="2.2"/><circle cx="14" cy="13.5" r="2.2"/></svg>
+      <div><h2>Music</h2></div>
+    </header>
+    <div class="group">
+      <div class="now-playing" id="mu-now">Nothing playing</div>
+      <div class="transport">
+        <button class="ghost icon" id="mu-prev" aria-label="Previous"><svg viewBox="0 0 20 20"><path d="M15 4v12L7 10zM5 4v12"/></svg></button>
+        <button class="secondary" id="mu-toggle">Play</button>
+        <button class="ghost icon" id="mu-next" aria-label="Next"><svg viewBox="0 0 20 20"><path d="M5 4v12l8-6zM15 4v12"/></svg></button>
+        <button class="ghost icon" id="mu-stop" aria-label="Stop"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1.5"/></svg></button>
+      </div>
+      <label class="field">
+        <span>Volume <output id="mu-volume-out"></output></span>
+        <input type="range" min="0" max="100" step="5" id="mu-volume">
+      </label>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="music.shuffle"><span>Shuffle</span></label>
+        <label class="switch"><input type="checkbox" data-setting="music.repeat"><span>Repeat</span></label>
+        <label class="switch" title="The music and PiE-ink's voice come out of this phone or computer instead of the Pi's speaker"><input type="checkbox" class="here-switch"><span>Play on this device</span></label>
+      </div>
+      <p class="hint here-note" hidden></p>
+    </div>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Your music</span>
+        <button class="ghost" id="mu-add">+ Add files</button>
+      </div>
+      <input type="file" id="mu-file" accept="audio/*" multiple hidden>
+      <ul class="book-list" id="mu-list"></ul>
+      <p class="hint" id="mu-hint"></p>
+    </div>
+    <div class="group">
+      <p class="hint">The speaker, its voice and the test button are in Settings → Sound.</p>
+    </div>
+  </section>
+
+  <!-- Message -->
+  <section class="tab card" data-tab="message" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg>
+      <div><h2>Message</h2></div>
+    </header>
+    <div class="group">
+      <div class="toolbar">
+        <select class="font-select compact-select" data-setting="message.font" aria-label="Font"></select>
+        <label class="field inline size">
+          <span>Size <output id="message-size-out"></output></span>
+          <input type="range" min="8" max="60" data-setting="message.size">
+        </label>
+        <div class="toolbar-row">
+          <div class="segmented icons" data-setting="message.align" title="Align">
+            <button data-value="left" aria-label="Align left"><svg viewBox="0 0 16 16"><path d="M2 3h12M2 6h8M2 9h12M2 12h8"/></svg></button>
+            <button data-value="center" aria-label="Align centre"><svg viewBox="0 0 16 16"><path d="M2 3h12M4 6h8M2 9h12M4 12h8"/></svg></button>
+            <button data-value="right" aria-label="Align right"><svg viewBox="0 0 16 16"><path d="M2 3h12M6 6h8M2 9h12M6 12h8"/></svg></button>
+          </div>
+          <div class="segmented compact" data-setting="message.source">
+            <button data-value="message">Text</button><button data-value="joke">Joke</button><button data-value="fortune">Fortune</button><button data-value="topic">Topic</button>
+          </div>
+        </div>
+      </div>
+
+
+
+
+      <div class="text-row">
+        <div class="segmented icons vertical" data-setting="message.valign" title="Position">
+          <button data-value="top" aria-label="Top"><svg viewBox="0 0 16 16"><path d="M2 2h12M4 5h8M4 8h8"/></svg></button>
+          <button data-value="center" aria-label="Middle"><svg viewBox="0 0 16 16"><path d="M4 5h8M4 8h8M4 11h8"/></svg></button>
+          <button data-value="bottom" aria-label="Bottom"><svg viewBox="0 0 16 16"><path d="M4 8h8M4 11h8M2 14h12"/></svg></button>
+        </div>
+        <textarea rows="4" data-setting="message.text" placeholder="What should the screen say?" id="message-text-field"></textarea>
+        <label class="field cycle" id="message-cycle-field" hidden>
+          <span>New one every <output id="message-cycle-out"></output></span>
+          <span class="slider-row">
+            <input type="range" min="0" max="300" step="10" data-setting="message.cycle_seconds">
+            <label class="switch tight" id="message-speak-field" title="Read each new one out loud">
+              <input type="checkbox" data-setting="message.speak_new"><span>Read</span>
+            </label>
+          </span>
+          <span class="hint">A fresh one each time. Topics are conversation starters for when it goes quiet.</span>
+        </label>
+      </div>
+      <div class="draw-actions">
+        <button class="secondary" id="msg-speak">Read this out loud</button>
+        <button class="ghost" id="msg-mp3">Save as MP3</button>
+      </div>
+      <p class="hint" id="msg-note"></p>
+    </div>
+  </section>
+
+  <!-- Draw -->
+  <section class="tab card" data-tab="draw" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M3 17l1-4L14 3l3 3-10 10-4 1zM12 5l3 3"/></svg>
+      <div><h2>Draw</h2></div>
+    </header>
+    <div class="group">
+    <div class="draw-target" id="draw-target-row" hidden>
+      <span class="draw-target-label">Draw for</span>
+      <div class="segmented" id="draw-target">
+        <button data-value="eink" class="active">E-ink</button><button data-value="lcd">LCD</button>
+      </div>
+      <span class="hint" id="draw-target-hint">Black and white, for the e-ink.</span>
+    </div>
+    <!-- with a second screen on, both canvases sit side by side: the one being drawn on, and the other screen's picture -->
+    <div class="canvases" id="draw-canvases">
+      <div class="canvas-wrap" id="draw-wrap" data-target="eink">
+        <canvas id="draw-canvas" width="500" height="244"></canvas>
+        <input type="text" id="draw-text-editor" class="text-editor" maxlength="80" autocomplete="off" spellcheck="false" hidden>
+        <span class="canvas-tag">E-ink</span>
+      </div>
+      <div class="canvas-wrap other" id="draw-other-wrap" data-target="lcd" title="Draw for this screen instead" hidden>
+        <canvas id="draw-other" width="240" height="280"></canvas>
+        <span class="canvas-tag">LCD</span>
+      </div>
+    </div>
+    </div>
+    <div class="group">
+    <div class="tools" id="draw-tool">
+      <button data-value="select"><svg viewBox="0 0 20 20"><path d="M5 3l11 8-5 1-3 5z"/></svg>Select</button>
+      <button data-value="pen" class="active"><svg viewBox="0 0 20 20"><path d="M3 17l1-4L14 3l3 3-10 10-4 1zM12 5l3 3"/></svg>Pen</button>
+      <button data-value="line"><svg viewBox="0 0 20 20"><path d="M3 17L17 3"/></svg>Line</button>
+      <button data-value="rect"><svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10" rx="1"/></svg>Rect</button>
+      <button data-value="circle"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/></svg>Circle</button>
+      <button data-value="fill"><svg viewBox="0 0 20 20"><path d="M4 11l7-7 6 6-7 7zM4 11h9M16 13c1 1.5 1 3 0 3s-1-1.5 0-3z"/></svg>Fill</button>
+      <button data-value="text"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11M7 16h6"/></svg>Text</button>
+      <button data-value="erase"><svg viewBox="0 0 20 20"><path d="M3 13l8-8 6 6-5 5H7zM6 16h11"/></svg>Erase</button>
+      <button data-action="import" title="Add a photo — then drag, resize and rotate it"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="1.5"/><circle cx="7.5" cy="8.5" r="1.5"/><path d="M3 14l4-4 3 3 3-3 4 4"/></svg>Photo</button>
+    </div>
+    <div class="swatches" id="draw-colours" hidden aria-label="Colour">
+      <button class="swatch active" data-colour="#000000" style="--c:#000000" title="Black"></button>
+      <button class="swatch" data-colour="#ffffff" style="--c:#ffffff" title="White"></button>
+      <button class="swatch" data-colour="#8a8a8a" style="--c:#8a8a8a" title="Grey"></button>
+      <button class="swatch" data-colour="#e53935" style="--c:#e53935" title="Red"></button>
+      <button class="swatch" data-colour="#fb8c00" style="--c:#fb8c00" title="Orange"></button>
+      <button class="swatch" data-colour="#fdd835" style="--c:#fdd835" title="Yellow"></button>
+      <button class="swatch" data-colour="#43a047" style="--c:#43a047" title="Green"></button>
+      <button class="swatch" data-colour="#00acc1" style="--c:#00acc1" title="Cyan"></button>
+      <button class="swatch" data-colour="#1e88e5" style="--c:#1e88e5" title="Blue"></button>
+      <button class="swatch" data-colour="#8e24aa" style="--c:#8e24aa" title="Purple"></button>
+      <button class="swatch" data-colour="#ec407a" style="--c:#ec407a" title="Pink"></button>
+      <button class="swatch" data-colour="#6d4c41" style="--c:#6d4c41" title="Brown"></button>
+      <label class="swatch custom" title="Any colour"><input type="color" id="draw-colour-custom" value="#ff6f00"><span></span></label>
+    </div>
+    <div class="draw-tools">
+      <label class="field inline">
+        <span>Size</span>
+        <input type="range" id="draw-brush" min="1" max="12" value="3">
+      </label>
+      <label class="switch" id="draw-filled-wrap"><input type="checkbox" id="draw-filled"><span>Solid</span></label>
+      <select id="draw-text-font" class="compact-select" aria-label="Text font" title="Text font"></select>
+      <button class="ghost danger icon" id="draw-obj-delete" aria-label="Remove selected" title="Remove selected"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><path d="M7.5 7.5l5 5M12.5 7.5l-5 5"/></svg></button>
+    </div>
+    </div>
+    <div class="group">
+    <div class="draw-actions">
+      <button class="ghost icon" id="draw-undo" aria-label="Undo" title="Undo"><svg viewBox="0 0 20 20"><path d="M8 5L4 9l4 4"/><path d="M4 9h8a4 4 0 0 1 0 8h-2"/></svg></button>
+      <button class="ghost icon" id="draw-redo" aria-label="Redo" title="Redo"><svg viewBox="0 0 20 20"><path d="M12 5l4 4-4 4"/><path d="M16 9H8a4 4 0 0 0 0 8h2"/></svg></button>
+      <button class="ghost icon" id="draw-clear" aria-label="Clear the canvas" title="Clear the canvas"><svg viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10M9 9v4M11 9v4"/></svg></button>
+      <button class="ghost" id="draw-ai" title="Ask the bot what this is">AI</button>
+      <select class="compact-select" id="draw-postcard" title="Send this drawing to another PiE-ink">
+        <option value="">Send to…</option>
+      </select>
+      <span class="spacer"></span>
+      <label class="switch" id="draw-dither-wrap"><input type="checkbox" data-setting="image.dither"><span>Dither photos</span></label>
+      <label class="switch" id="draw-live-wrap" hidden title="Every stroke goes to the screen as you draw"><input type="checkbox" id="draw-live"><span>Live</span></label>
+      <input type="file" id="draw-file" accept="image/*" hidden>
+    <p class="hint" id="draw-ai-note" hidden></p>
+    </div>
+    </div>
+  </section>
+
+  <!-- Read -->
+  <section class="tab card" data-tab="read" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M3 4h5.5a2 2 0 0 1 2 2v10a2 2 0 0 0-2-2H3zM17 4h-5.5a2 2 0 0 0-2 2v10a2 2 0 0 1 2-2H17z"/></svg>
+      <div><h2>Read</h2></div>
+    </header>
+
+    <!-- 1. what's open, and the controls for it -->
+    <div class="group">
+      <div class="reader-bar">
+        <button class="ghost big" id="rd-prev" aria-label="Previous page">◀</button>
+        <div class="reader-pos">
+          <b id="rd-title">No book open</b>
+          <span id="rd-pos">Pick one from the library below</span>
+        </div>
+        <button class="ghost big" id="rd-next" aria-label="Next page">▶</button>
+      </div>
+      <input type="range" id="rd-slider" min="0" max="0" value="0" aria-label="Page">
+      <div class="field-row" id="rd-book-settings">
+        <label class="field">
+          <span>Font</span>
+          <select class="font-select" data-setting="reader.font"></select>
+        </label>
+        <label class="field">
+          <span>Size <output id="rd-size-out"></output></span>
+          <input type="range" min="8" max="24" data-setting="reader.size">
+        </label>
+      </div>
+      <div class="field-row" id="rd-comic-settings" hidden>
+        <label class="field">
+          <span>Zoom <output id="rd-zoom-out"></output></span>
+          <input type="range" min="1" max="3" step="0.5" data-setting="reader.zoom">
+        </label>
+      </div>
+      <details class="more" id="rd-more">
+        <summary>More settings</summary>
+        <div class="more-body">
+          <div class="switches">
+            <button class="ghost icon" id="rd-rotate" title="Rotate the page 90° (turn the display to match)"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg> Rotate <output id="rd-rot-out">0°</output></button>
+            <label class="switch"><input type="checkbox" data-setting="reader.page_numbers"><span>Page numbers</span></label>
+            <label class="switch"><input type="checkbox" data-setting="reader.dither"><span>Dither comics</span></label>
+            <label class="switch"><input type="checkbox" data-setting="reader.auto_contrast"><span>Auto contrast</span></label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>Margin <output id="rd-margin-out"></output></span>
+              <input type="range" min="0" max="12" data-setting="reader.margin">
+            </label>
+            <label class="field">
+              <span>Turn pages automatically <output id="rd-auto-out"></output></span>
+              <input type="range" min="0" max="120" step="5" data-setting="reader.auto_seconds">
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- 2. the library, with one way in to add things -->
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Library</span>
+        <button class="ghost" id="rd-add">+ Add</button>
+      </div>
+      <div class="add-panel" id="rd-add-panel" hidden>
+        <div class="segmented wide" id="src-pick">
+          <button data-value="upload" class="active">Upload</button><button data-value="gutenberg">Gutenberg</button><button data-value="xkcd">xkcd</button><button data-value="archive">Old comics</button>
+        </div>
+        <div id="src-upload">
+          <button class="secondary" id="rd-upload">Choose a file…</button>
+          <input type="file" id="rd-file" accept=".epub,.txt,.pdf,.cbz,.zip,.png,.jpg,.jpeg,.webp" hidden>
+          <p class="hint" id="rd-hint">EPUB, TXT and PDF for books · CBZ, PDF and images for comics.</p>
+        </div>
+        <div class="search-wrap" id="src-search-wrap" hidden>
+          <input type="search" id="src-search" placeholder="Search Gutenberg…" autocomplete="off">
+        </div>
+        <div class="draw-actions" id="src-xkcd" hidden>
+          <button class="ghost" data-xkcd="random">Random strip</button>
+          <button class="ghost" data-xkcd="latest">Latest</button>
+          <span class="key-row" style="flex:1;min-width:150px"><input type="number" id="src-xkcd-num" min="1" placeholder="Strip #"><button class="ghost" id="src-xkcd-go">Get</button></span>
+        </div>
+        <p class="hint" id="src-hint" hidden></p>
+        <ul id="src-results" class="book-list results-list"></ul>
+      </div>
+      <ul id="rd-list" class="book-list"></ul>
+      <div id="rd-jobs" class="jobs"></div>
+    </div>
+  </section>
+
+  <!-- Camera -->
+  <section class="tab card" data-tab="camera" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M3 7h3l1.5-2h5L14 7h3v9H3z"/><circle cx="10" cy="11.5" r="2.8"/></svg>
+      <div><h2>Camera</h2></div>
+    </header>
+    <div class="group">
+      <div class="cam-wrap" id="cam-wrap" data-rot="0">
+        <img id="cam-live" alt="Camera" width="480" height="360">
+        <span class="cam-badge" id="cam-badge">connecting…</span>
+        <span class="cam-shape" id="cam-shape"></span>
+        <button class="cam-rotate cam-full" id="cam-full" aria-label="Full screen" title="The live view full screen (Esc to leave)"><svg viewBox="0 0 20 20"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg></button>
+        <button class="cam-rotate" id="cam-rotate" aria-label="Rotate this view" title="Rotate this view only (not the screen)"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg></button>
+      </div>
+      <p class="hint">Framed like the screen (same shape, Fill/Whole and mirror). The round button turns this view only; "Rotate 90°" below turns the screen.</p>
+      <div class="shoot" id="shoot">
+        <div class="photo-filters" id="photo-filters" role="radiogroup" aria-label="Filter"></div>
+        <div class="shoot-row">
+          <select id="photo-timer" aria-label="When to take it" title="A timer, so you can be in it">
+            <option value="0">Now</option><option value="3">In 3 s</option><option value="10">In 10 s</option>
+          </select>
+          <button class="primary shutter" id="photo-take"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7h3l1.5-2h5L14 7h3v9H3z"/><circle cx="10" cy="11.5" r="2.8"/></svg><span id="photo-take-label">Take a picture</span></button>
+        </div>
+        <div class="photo-strip" id="photo-strip" hidden></div>
+      </div>
+      <div class="ptz" id="ptz" hidden>
+        <div class="ptz-stick" id="ptz-stick" tabindex="0" aria-label="Turn the camera: drag the stick, or use the arrow keys">
+          <svg class="ptz-marks" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8l-5.5 6.5h11zM50 92l-5.5-6.5h11zM8 50l6.5-5.5v11zM92 50l-6.5-5.5v11z"/><circle cx="50" cy="50" r="27"/></svg>
+          <span class="ptz-knob" id="ptz-knob"></span>
+        </div>
+        <div class="ptz-side">
+          <label class="switch" id="ptz-follow-row" hidden title="The camera turns after you by itself. The stick rests while it does."><input type="checkbox" id="ptz-follow"><span>Follow me</span></label>
+          <label class="field" id="ptz-zoom-field">
+            <span>Zoom <output id="ptz-zoom-out">0%</output></span>
+            <input type="range" id="ptz-zoom" min="0" max="100" step="1" value="0">
+          </label>
+          <div class="ptz-buttons">
+            <button class="ghost" id="ptz-center" title="Point straight ahead">Center</button>
+            <button class="ghost" id="ptz-home" title="Go to the saved home position">Home</button>
+          </div>
+          <button class="secondary" id="ptz-look" title="Turn left, ahead and right, and say what is there">Look around</button>
+          <span class="hint" id="ptz-pos"></span>
+        </div>
+      </div>
+      <details class="more" id="ptz-more" hidden>
+        <summary>Turning</summary>
+        <div class="more-body">
+          <div class="field-row">
+            <label class="field"><span>Stick speed <output id="ptz-speed-out"></output></span>
+              <input type="range" min="10" max="120" step="5" data-setting="ptz.speed"></label>
+            <label class="field"><span>Look around turns <output id="ptz-sweep-out"></output></span>
+              <input type="range" min="30" max="120" step="5" data-setting="ptz.sweep_degrees"></label>
+          </div>
+          <div class="field-row">
+            <label class="field" title="Nothing turns it lower than this: an OBSBOT pointed down goes to sleep"><span>Lowest it looks <output id="ptz-lowest-out"></output></span>
+              <input type="range" min="-90" max="0" step="5" data-setting="ptz.lowest"></label>
+            <label class="field" title="The little friend and Look around turn this fast, easing in and out"><span>Turns by itself at <output id="ptz-gentle-out"></output></span>
+              <input type="range" min="10" max="90" step="5" data-setting="ptz.gentle"></label>
+          </div>
+          <div class="switches">
+            <label class="switch"><input type="checkbox" data-setting="ptz.swap_x"><span>Swap left and right</span></label>
+            <label class="switch"><input type="checkbox" data-setting="ptz.swap_y"><span>Swap up and down</span></label>
+            <label class="switch" id="ptz-wake-row" hidden title="An OBSBOT left unused falls asleep with its lens turned down. With this on, it's woken whenever PiE-ink uses the camera."><input type="checkbox" data-setting="ptz.wake"><span>Wake it when it's used</span></label>
+          </div>
+          <div class="draw-actions">
+            <span class="hint" id="ptz-home-note">Home: straight ahead.</span>
+            <span class="spacer"></span>
+            <button class="ghost" id="ptz-save-home" title="Remember where it points now as home">Make this home</button>
+          </div>
+          <p class="hint">Arrow keys turn it too, + and − zoom, 0 centres. The bot turns it when you say "look left", "look around",
+          "zoom in" or "follow me". Center, Home and "look left" stop the following.</p>
+        </div>
+      </details>
+      <button class="ghost icon wide" id="friends-btn" title="Show the camera feeds of other PiE-inks on your network"><svg viewBox="0 0 20 20"><rect x="2" y="4" width="7" height="5" rx="1"/><rect x="11" y="4" width="7" height="5" rx="1"/><rect x="2" y="11" width="7" height="5" rx="1"/><rect x="11" y="11" width="7" height="5" rx="1"/></svg> Friends' cameras <output id="friends-count"></output></button>
+      <div class="friends-grid" id="friends-grid" hidden></div>
+    </div>
+    <div class="group" id="buddy-group">
+      <div class="group-row">
+        <span class="group-label">Little friend</span>
+        <label class="switch"><input type="checkbox" id="buddy-on"><span>On</span></label>
+      </div>
+      <div class="buddy-now">
+        <span class="buddy-face" id="buddy-face" aria-hidden="true">(-__-)</span>
+        <div class="buddy-words">
+          <span class="buddy-caption" id="buddy-caption">Off</span>
+          <span class="hint" id="buddy-said"></span>
+        </div>
+      </div>
+      <div class="draw-actions">
+        <span class="hint" id="buddy-note">It looks around by itself, says hi when it sees someone, and is surprised by what's new. Settings → Friend for more.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="buddy-show" title="Put its face on the screen">Show its face</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Seen</span>
+        <span class="hint" id="events-note"></span>
+      </div>
+      <ul class="events" id="events-list"><li class="empty">Nothing yet.</li></ul>
+      <div class="draw-actions">
+        <span class="hint">What changes in front of the camera, as it happens: people, packages, the door, pets. Turn it on under Settings → Watching.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="events-look" title="Take a look right now">Look now</button>
+        <button class="ghost" id="events-clear">Clear</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="group-label">On the screen</span>
+      <div class="field-row">
+        <label class="field">
+          <span>Update every <output id="cam-interval-out"></output></span>
+          <input type="range" min="0.5" max="5" step="0.5" data-setting="camera.interval">
+        </label>
+        <label class="field">
+          <span>Fit</span>
+          <div class="segmented" data-setting="camera.fit">
+            <button data-value="cover">Fill</button><button data-value="contain">Whole</button>
+          </div>
+        </label>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Screen rotation <output id="cam-rot-out">0°</output></span>
+          <button class="ghost icon wide" id="cam-screen-rotate" title="Rotate what goes to the screen by 90°"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg> Rotate 90°</button>
+        </label>
+        <label class="field">
+          <span>Camera</span>
+          <div class="key-row">
+            <select id="cam-pick" data-setting="camera.source">
+              <option value="auto">Auto</option>
+            </select>
+            <button class="ghost" id="cam-next" title="Switch to the next camera">Next</button>
+            <button class="ghost" id="cam-why" title="Check the USB bus, the video nodes and the driver, and say what is wrong">Why not found?</button>
+          </div>
+        </label>
+      </div>
+      <pre class="log" id="cam-probe" hidden></pre>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="camera.dither"><span>Dither</span></label>
+        <label class="switch"><input type="checkbox" data-setting="camera.auto_contrast"><span>Auto contrast</span></label>
+        <label class="switch"><input type="checkbox" data-setting="camera.mirror"><span>Mirror</span></label>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Crypto -->
+  <section class="tab card" data-tab="crypto" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M3 14l4-5 3 3 4-6 3 4"/><path d="M3 17h14"/></svg>
+      <div><h2>Crypto</h2></div>
+    </header>
+    <div class="group">
+      <div class="field-row">
+        <label class="field">
+          <span>Name on screen</span>
+          <input type="text" data-setting="crypto.username" maxlength="14">
+        </label>
+        <label class="field">
+          <span>Seconds per coin <output id="crypto-coin-out"></output></span>
+          <input type="range" min="20" max="600" step="10" data-setting="crypto.coin_seconds">
+        </label>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Graph history <output id="crypto-days-out"></output></span>
+          <input type="range" min="1" max="90" data-setting="crypto.graph_days">
+        </label>
+        <label class="field">
+          <span>Redraw every <output id="crypto-refresh-out"></output></span>
+          <input type="range" min="1" max="30" data-setting="crypto.refresh_seconds">
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="crypto.show_faces"><span>Face</span></label>
+        <label class="switch"><input type="checkbox" data-setting="crypto.show_news"><span>Headlines</span></label>
+      </div>
+    </div>
+    <div class="group watch">
+      <span class="group-label">Coins</span>
+      <div class="search-wrap">
+        <input type="search" id="watch-search" placeholder="Add a coin — bitcoin, DOGE, solana…" autocomplete="off">
+        <ul id="watch-results" class="results" hidden></ul>
+      </div>
+      <p class="hint" id="watch-hint"></p>
+      <ul id="watch-list" class="watch-list"></ul>
+    </div>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">What you hold</span>
+        <label class="switch"><input type="checkbox" data-setting="holdings.show"><span>In the rotation</span></label>
+      </div>
+      <p class="hint">Put how much of each coin you hold under it in the list above. What it all adds up to, from the same prices
+      — with what your miners have at their pools — and how that has moved. The bot knows the figure too ("how's my crypto?").</p>
+      <div class="worth" id="worth" hidden>
+        <div class="worth-top">
+          <b id="worth-total">—</b>
+          <span><span id="worth-day">—</span><br><small id="worth-week"></small></span>
+        </div>
+        <svg id="worth-graph" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true" hidden></svg>
+        <p class="hint" id="worth-note"></p>
+      </div>
+      <p class="hint" id="worth-empty">Nothing held yet.</p>
+      <div class="field-row">
+        <label class="field">
+          <span>Tell me when it passes</span>
+          <div class="key-row">
+            <span class="hint money-sign">$</span>
+            <input type="number" min="0" step="any" data-setting="holdings.milestone" inputmode="decimal" placeholder="0 = off">
+          </div>
+        </label>
+        <label class="field">
+          <span>…and on a day of <output id="holdings-move-out"></output></span>
+          <input type="range" min="2" max="50" step="1" data-setting="holdings.move_pct">
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="holdings.notify"><span>Message my phone</span></label>
+        <label class="switch"><input type="checkbox" data-setting="holdings.comment"><span>The bot comments on it</span></label>
+      </div>
+      <div class="draw-actions">
+        <span class="hint">Hear what it will say:</span>
+        <button class="ghost holdings-try" data-kind="rich">Past the line</button>
+        <button class="ghost holdings-try" data-kind="crash">A crash</button>
+        <button class="ghost holdings-try" data-kind="rally">A rally</button>
+      </div>
+    </div>
+    <div class="group">
+      <details class="more" id="mining-more">
+        <summary>Mining <span class="hint" id="mining-sum"></span></summary>
+        <div class="more-body">
+          <div class="group-row">
+            <span class="group-label">Duino-Coin</span>
+            <label class="switch"><input type="checkbox" data-setting="duco.enabled"><span>In the rotation</span></label>
+          </div>
+          <p class="hint">Your miners as a coin among the coins: balance, hashrate, what it earns a day, each worker — on the e-ink,
+          the LCD, and the bot's mind. And a word (your phone, the bot) when the hashrate falls under a line you set.</p>
+          <div class="field-row">
+            <label class="field">
+              <span>Username</span>
+              <div class="key-row">
+                <input type="text" data-setting="duco.username" placeholder="your Duino-Coin name" autocomplete="off" spellcheck="false" maxlength="40">
+                <button class="ghost mining-check" data-pool="duco" title="Look the name up on the Duino-Coin server">Look up</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Tell me when it falls under</span>
+              <div class="key-row">
+                <input type="number" min="0" step="any" class="hash-num" data-pool="duco" inputmode="decimal" placeholder="0" style="flex:0 0 96px;min-width:96px">
+                <select class="hash-unit compact-select" data-pool="duco"><option value="1">H/s</option><option value="1000">KH/s</option><option value="1000000">MH/s</option><option value="1000000000">GH/s</option></select>
+                <span class="hint">0 means only when nothing is mining</span>
+              </div>
+            </label>
+          </div>
+          <div class="switches">
+            <label class="switch"><input type="checkbox" data-setting="duco.notify"><span>Message my phone</span></label>
+            <label class="switch"><input type="checkbox" data-setting="duco.comment"><span>The bot comments on it</span></label>
+          </div>
+          <p class="hint mining-note" data-pool="duco">Off.</p>
+          <ul class="events mining-miners" data-pool="duco" hidden></ul>
+          <div class="pool-split"></div>
+          <div class="group-row">
+            <span class="group-label">Verus</span>
+            <label class="switch"><input type="checkbox" data-setting="verus.enabled"><span>In the rotation</span></label>
+          </div>
+          <p class="hint">The same for Verus mined on luckpool.net: the wallet your miners pay into, its unpaid balance and what has
+          been paid out, the rate in sols, the luck, each worker. The price comes from CoinGecko.</p>
+          <div class="field-row">
+            <label class="field">
+              <span>Wallet address</span>
+              <div class="key-row">
+                <input type="text" data-setting="verus.wallet" placeholder="R…" autocomplete="off" spellcheck="false" maxlength="64">
+                <button class="ghost mining-check" data-pool="verus" title="Look the wallet up on luckpool.net">Look up</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Tell me when it falls under</span>
+              <div class="key-row">
+                <input type="number" min="0" step="any" class="hash-num" data-pool="verus" inputmode="decimal" placeholder="0" style="flex:0 0 96px;min-width:96px">
+                <select class="hash-unit compact-select" data-pool="verus"><option value="1">H/s</option><option value="1000">KH/s</option><option value="1000000">MH/s</option><option value="1000000000">GH/s</option></select>
+                <span class="hint">0 means only when nothing is mining</span>
+              </div>
+            </label>
+          </div>
+          <div class="switches">
+            <label class="switch"><input type="checkbox" data-setting="verus.notify"><span>Message my phone</span></label>
+            <label class="switch"><input type="checkbox" data-setting="verus.comment"><span>The bot comments on it</span></label>
+          </div>
+          <p class="hint mining-note" data-pool="verus">Off.</p>
+          <ul class="events mining-miners" data-pool="verus" hidden></ul>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- System -->
+  <section class="tab card" data-tab="system" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2"/><rect x="7" y="7" width="6" height="6"/><path d="M8 3V1M12 3V1M8 19v-2M12 19v-2M3 8H1M3 12H1M19 8h-2M19 12h-2"/></svg>
+      <div><h2>System</h2></div>
+    </header>
+    <dl class="stats" id="stats">
+      <div><img src="/icons/cpu.png" alt=""><span><dt>CPU</dt><dd id="st-cpu">—</dd></span></div>
+      <div><img src="/icons/ram.png" alt=""><span><dt>Memory</dt><dd id="st-mem">—</dd></span></div>
+      <div><img src="/icons/temp.png" alt=""><span><dt>Temp</dt><dd id="st-temp">—</dd></span></div>
+      <div><img src="/icons/storage.png" alt=""><span><dt>Disk</dt><dd id="st-disk">—</dd></span></div>
+      <div><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c3 3 3 12 0 15M10 2.5c-3 3-3 12 0 15"/></svg><span><dt>Address</dt><dd id="st-ip">—</dd></span></div>
+      <div><svg viewBox="0 0 20 20"><path d="M10 3v7l4 2"/><circle cx="10" cy="10" r="7.5"/></svg><span><dt>Uptime</dt><dd id="st-up">—</dd></span></div>
+    </dl>
+
+    <div class="group" id="friends-group" hidden>
+      <span class="group-label">Other PiE-inks on your network</span>
+      <ul class="book-list" id="friends-list"></ul>
+    </div>
+
+
+
+  </section>
+
+</main>
+
+
+<aside class="sidebar" id="sidebar">
+  <section class="card side-card" id="now-card">
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><path d="M2.5 10h3l2-5 3 10 2-7 1.5 2h3.5"/></svg>
+      <div><h2>Right now</h2></div>
+    </header>
+    <ul class="now" id="now-list"><li class="empty">…</li></ul>
+  </section>
+  <section class="card side-card" id="lcd-card" hidden>
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><rect x="5" y="2.5" width="10" height="15" rx="1.5"/><path d="M8 15h4"/></svg>
+      <div><h2>Second screen</h2></div>
+    </header>
+    <img id="sb-lcd" class="sb-lcd" alt="What the LCD shows">
+    <select id="sb-lcd-screen" class="words" title="What the LCD shows"></select>
+  </section>
+  <section class="card side-card" id="panel-card">
+    <label class="panel-pick">
+      <svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="10" rx="1.5"/><path d="M7 17h6"/></svg>
+      <span>Put on the panel</span>
+      <select id="screen-pick" class="words" title="Any screen, on the panel now"></select>
+    </label>
+  </section>
+  <section class="card side-card" id="pi-card">
+    <header class="card-head">
+      <svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2"/><rect x="7" y="7" width="6" height="6"/><path d="M8 3V1M12 3V1M8 19v-2M12 19v-2M3 8H1M3 12H1M19 8h-2M19 12h-2"/></svg>
+      <div><h2 id="pi-name">The Pi</h2></div>
+    </header>
+    <dl class="stats mini">
+      <div><span><dt>CPU</dt><dd id="sb-cpu">—</dd></span></div>
+      <div><span><dt>Temp</dt><dd id="sb-temp">—</dd></span></div>
+      <div><span><dt>Memory</dt><dd id="sb-mem">—</dd></span></div>
+      <div><span><dt>Disk</dt><dd id="sb-disk">—</dd></span></div>
+      <div><span><dt>Uptime</dt><dd id="sb-up">—</dd></span></div>
+      <div><span><dt>Address</dt><dd id="sb-ip">—</dd></span></div>
+    </dl>
+  </section>
+</aside>
+
+<div class="sheet" id="bot-sheet" hidden role="dialog" aria-label="The bot">
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <h2>The bot</h2>
+    <button class="ghost icon" id="bot-close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <div class="sheet-body">
+    <div class="group">
+      <label class="field">
+        <span>Where it thinks</span>
+        <div class="segmented" id="llm-where">
+          <button data-value="pi">This Pi</button><button data-value="remote">Another computer</button>
+        </div>
+      </label>
+      <div class="key-row" id="llm-host-row">
+        <input type="text" data-setting="llm.host" placeholder="http://192.168.0.179:11434" autocomplete="off" spellcheck="false">
+        <button class="ghost" id="llm-test">Check</button>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Model</span><select data-setting="llm.model" id="llm-model"><option value="">— check the server first —</option></select></label>
+        <label class="field"><span>Eyes <small>(model that can see)</small></span><select data-setting="llm.vision_model" id="llm-vision"><option value="">— same as above —</option></select></label>
+      </div>
+      <div id="llm-backup" hidden>
+        <label class="switch"><input type="checkbox" data-setting="llm.use_backup"><span>If that machine is off, use this Pi</span></label>
+        <label class="field" id="llm-backup-model" hidden><span>Model on the Pi</span>
+          <select data-setting="llm.backup_model" id="llm-pi-model"></select></label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="llm.enabled"><span>Use the bot</span></label>
+        <label class="switch"><input type="checkbox" data-setting="message.bot_face"><span>Show a face</span></label>
+        <label class="switch"><input type="checkbox" data-setting="audio.speak_bot"><span>Say it out loud</span></label>
+      </div>
+      <label class="field">
+        <span>Remarks of its own <output id="llm-chatter-out"></output></span>
+        <input type="range" min="0" max="120" step="5" data-setting="llm.chatter_minutes">
+      </label>
+      <label class="switch"><input type="checkbox" data-setting="llm.see"><span>Let it look through the camera</span></label>
+      <p class="hint" id="llm-note">Runs on your own machine — nothing leaves the network. A big model takes a minute to warm up the first time.</p>
+      <div class="say" id="llm-say" hidden></div>
+      <div class="draw-actions">
+        <button class="ghost icon" id="llm-speak" hidden aria-label="Say it again" title="Say it again"><svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5"/><path d="M16.5 5a6.5 6.5 0 0 1 0 10"/></svg></button>
+      </div>
+    </div>
+        </div>
+  <div class="sheet-foot">
+    <button class="ghost" id="llm-put">Show it on the screen</button>
+    <span class="spacer"></span>
+    <button class="primary" id="bot-save" disabled>Save</button>
+  </div>
+</div>
+
+
+<div class="sheet" id="photo-sheet" hidden role="dialog" aria-label="Photo">
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <h2>Photo</h2>
+    <button class="ghost icon" id="photo-close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <div class="sheet-body">
+    <div class="photo-view">
+      <img class="photo-big" id="photo-big" alt="The photo">
+      <button class="photo-nav prev" id="photo-prev" aria-label="Newer photo"><svg viewBox="0 0 20 20"><path d="M12.5 4.5L7 10l5.5 5.5"/></svg></button>
+      <button class="photo-nav next" id="photo-next" aria-label="Older photo"><svg viewBox="0 0 20 20"><path d="M7.5 4.5L13 10l-5.5 5.5"/></svg></button>
+    </div>
+    <p class="hint" id="photo-meta"></p>
+  </div>
+  <div class="sheet-foot">
+    <button class="ghost danger" id="photo-delete">Delete</button>
+    <span class="spacer"></span>
+    <button class="ghost" id="photo-show" title="Show it on the e-ink screen">On the screen</button>
+    <button class="ghost" id="photo-send" title="Send it to your Telegram chat">Telegram</button>
+    <button class="primary" id="photo-download">Download</button>
+  </div>
+</div>
+
+
+<div class="sheet" id="group-sheet" hidden role="dialog" aria-label="Group chat">
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <h2>Group chat</h2>
+    <button class="ghost icon" id="group-close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <div class="sheet-body">
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Who's around</span>
+        <span class="hint" id="group-who"></span>
+      </div>
+      <div class="bubbles tall" id="group-bubbles"></div>
+    </div>
+    <div class="group">
+      <div class="field-row tight">
+        <label class="field"><span>To</span><select id="group-to"><option value="all">Everyone</option></select></label>
+        <label class="field"><span>Talk to</span>
+          <div class="segmented" id="group-mode">
+            <button data-value="text" class="active">Them</button><button data-value="ai">Their bot</button>
+          </div>
+        </label>
+      </div>
+      <div class="draw-actions">
+        <button class="ghost" id="group-stop">Stop the AIs</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="group-clear">Clear</button>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" id="group-speak-ai"><span>Bots say their own lines out loud</span></label>
+        <label class="switch"><input type="checkbox" id="group-show-screen"><span>Show the conversation on the panel while they talk</span></label>
+        <label class="switch"><input type="checkbox" id="group-indicator"><span>Little mark on the panel while they talk</span></label>
+      </div>
+      <button class="ghost" id="group-to-screen">Show the conversation on the screen now</button>
+      <p class="hint" id="group-note">Messages go straight to the other Pis on your network. "Their bot" sends
+      it to the other Pi's AI, which answers back — and the two bots carry on until you press
+      Stop the AIs, which ends it on every Pi.</p>
+    </div>
+  </div>
+  <div class="sheet-foot">
+    <input type="text" id="group-input" placeholder="Say something…" autocomplete="off">
+    <button class="primary" id="group-send">Send</button>
+  </div>
+</div>
+
+<div class="sheet" id="settings-sheet" hidden role="dialog" aria-label="Settings">
+  <div class="grabber"></div>
+  <div class="sheet-head">
+    <h2>Settings</h2>
+    <button class="ghost icon" id="settings-close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <nav class="sheet-tabs" id="sheet-tabs">
+    <button data-pane="screen" class="active">Screen</button>
+    <button data-pane="sound">Sound</button>
+    <button data-pane="auto">Watching</button>
+    <button data-pane="agent">Agent</button>
+    <button data-pane="buddy">Friend</button>
+    <button data-pane="cycle">Cycle</button>
+    <button data-pane="telegram">Telegram</button>
+    <button data-pane="home">Home</button>
+    <button data-pane="you">You</button>
+    <button data-pane="pi">Pi</button>
+  </nav>
+  <div class="sheet-body">
+    <div class="pane" data-pane="you" hidden>
+    <div class="group">
+      <div class="field-row">
+        <label class="field"><span>Name</span><input type="text" data-setting="me.name" placeholder="coolbeans" autocomplete="off"></label>
+        <label class="field"><span>Job title</span><input type="text" data-setting="me.job_title" placeholder="Engineer" autocomplete="off"></label>
+      </div>
+      <label class="field">
+        <span>Where this Pi lives — for the other Pis ("show me the camera from upstairs")</span>
+        <input type="text" data-setting="me.location" placeholder="workshop, upstairs, kitchen…" autocomplete="off" maxlength="40">
+      </label>
+      <div class="field-row">
+        <label class="field"><span>Yearly income</span><input type="number" min="0" step="1000" data-setting="finance.salary" placeholder="0" inputmode="numeric"></label>
+        <label class="field"><span>Currency</span><input type="text" data-setting="finance.currency" maxlength="3" placeholder="$" style="width:72px"></label>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Paid</span>
+          <select data-setting="finance.pay_periods">
+            <option value="52">Weekly</option><option value="26">Every 2 weeks</option>
+            <option value="24">Twice a month</option><option value="12">Monthly</option>
+          </select>
+        </label>
+        <label class="field"><span>&nbsp;</span>
+          <button class="ghost" id="show-me">Show me on the screen</button>
+        </label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Birthday <small>(optional)</small></span><input type="date" data-setting="me.birthday"></label>
+        <label class="field">
+          <span>Mood</span>
+          <select data-setting="me.mood">
+            <option value="auto">Auto (reads the day)</option>
+            <option value="happy">Happy (•‿‿•)</option>
+            <option value="cheerful">Cheerful (◕‿◕ )</option>
+            <option value="cool">Cool (⌐■_■)</option>
+            <option value="curious">Curious (☉_☉ )</option>
+            <option value="bored">Bored (-__-)</option>
+            <option value="tired">Tired (⇀‿‿↼)</option>
+            <option value="worried">Worried (°▃▃°)</option>
+            <option value="sad">Sad (╥☁╥ )</option>
+            <option value="hot">Too hot (&#39;⚆_⚆)</option>
+          </select>
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="me.show_fortunes"><span>Fortunes &amp; topics</span></label>
+        <label class="switch"><input type="checkbox" data-setting="me.show_jokes"><span>Jokes</span></label>
+      </div>
+      <p class="hint">This is the screen it starts on — a rotating handful of facts about your day.
+      Your income drives the money screen, which the cycle can include; your daily schedule is below.</p>
+    </div>
+    <div class="group">
+      <span class="group-label">Work days</span>
+      <div class="days" id="me-days">
+        <button data-day="mon">Mon</button><button data-day="tue">Tue</button><button data-day="wed">Wed</button><button data-day="thu">Thu</button><button data-day="fri">Fri</button><button data-day="sat">Sat</button><button data-day="sun">Sun</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Schedule</span>
+        <button class="ghost" id="me-add-block">+ Add block</button>
+      </div>
+      <p class="hint">Your everyday blocks. They drive what the Me screen says you're up to, and "paid" ones earn on the Finance screen.</p>
+      <div class="blocks" id="me-blocks"></div>
+    </div>
+    </div>
+    <div class="pane" data-pane="screen">
+    <div class="group">
+      <span class="group-label">Screen</span>
+      <div class="field-row">
+        <label class="field">
+          <span>Panel</span>
+          <select data-setting="display.driver" id="panel-select"></select>
+        </label>
+        <label class="field" id="full-refresh-field">
+          <span>Full refresh every <output id="full-out"></output> frames</span>
+          <input type="range" min="10" max="300" step="10" data-setting="display.full_refresh_every">
+        </label>
+      </div>
+      <p class="hint warn" id="panel-note" hidden></p>
+      <div class="field-row">
+        <label class="field">
+          <span>This page</span>
+          <div class="segmented" id="theme-pick">
+            <button data-value="light">Light</button><button data-value="dark">Dark</button>
+          </div>
+        </label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="display.dark_mode"><span>Invert the panel (white on black)</span></label>
+      </div>
+      <div class="field-row tight" id="lcd-panel-fields" hidden>
+        <label class="field"><span>Which way round</span>
+          <select data-setting="display.rotation" id="rotation-select">
+            <option value="90">Sideways (landscape)</option><option value="270">Sideways, the other way</option>
+            <option value="0">Upright (portrait)</option><option value="180">Upright, upside down</option>
+          </select></label>
+        <label class="field"><span>Brightness <output id="panel-bright-out"></output></span>
+          <input type="range" min="5" max="100" step="5" data-setting="display.brightness"></label>
+        <label class="field"><span>Accent</span><input type="color" data-setting="display.accent" class="colour"></label>
+      </div>
+    </div>
+    <div class="group" id="whisplay-group" hidden>
+      <span class="group-label">Whisplay HAT</span>
+      <p class="hint">The HAT's screen is the panel above. Its sound card is just a speaker and microphone once
+      PiSugar's driver is installed (<code>./setup.sh --whisplay</code>); pick them under Sound. This is the rest of it.</p>
+      <div class="field-row tight">
+        <label class="field"><span>A short press</span>
+          <select data-setting="whisplay.button">
+            <option value="next_mode">Next screen</option><option value="prev_mode">Previous screen</option>
+            <option value="next">Next (page, coin, joke)</option><option value="prev">Previous</option>
+            <option value="refresh">Redraw</option><option value="off">Screen off</option><option value="none">Nothing</option>
+          </select></label>
+      </div>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="whisplay.hold_to_talk"><span>Hold the button to talk to the bot</span></label>
+        <label class="switch"><input type="checkbox" data-setting="whisplay.led"><span>The LED shows what the bot is doing</span></label>
+      </div>
+      <p class="hint">The LED: blue listening, amber thinking, green talking, purple when the bots chat among themselves,
+      white while the button is held.</p>
+      <div class="draw-actions">
+        <span class="hint" id="whisplay-sound-note">Sound card: …</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="whisplay-sound">Use the HAT's speaker and mic</button>
+      </div>
+      <p class="hint" id="whisplay-note"></p>
+    </div>
+    <div class="group" id="lcd-group">
+      <span class="group-label">Second screen — a small colour LCD</span>
+      <p class="hint">A Waveshare 1.69&quot; (240×280) or 1.9&quot; (170×320) LCD can sit next to the e-ink: it shares the
+      SPI bus on the other chip-select, so neither screen waits on the other. Both wire the same way.</p>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="lcd.enabled"><span>Use the second screen</span></label>
+        <label class="switch"><input type="checkbox" data-setting="lcd.light_mode"><span>Light (black on white)</span></label>
+      </div>
+      <div class="lcd-row">
+        <img id="lcd-preview" class="lcd-preview" alt="What the LCD shows" width="120" height="140">
+        <div class="lcd-fields">
+          <div class="field-row tight">
+            <label class="field"><span>Model</span><select data-setting="lcd.model" id="lcd-model"></select></label>
+            <label class="field"><span>Shows</span><select data-setting="lcd.screen" id="lcd-screen"></select></label>
+          </div>
+          <label class="field">
+            <span>Brightness <output id="lcd-bright-out"></output></span>
+            <input type="range" min="0" max="100" step="5" data-setting="lcd.brightness">
+          </label>
+          <div class="field-row tight">
+            <label class="field"><span>Accent</span><input type="color" data-setting="lcd.accent" class="colour"></label>
+            <label class="field"><span>Rotation</span>
+              <select data-setting="lcd.rotation"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+            <label class="field" id="lcd-crypto-field" hidden><span>Chart</span>
+              <select data-setting="lcd.crypto_days"><option value="1">24 hours</option><option value="7">7 days</option><option value="30">30 days</option></select></label>
+          </div>
+          <p class="hint" id="lcd-camera-hint" hidden>Live, about ten frames a second. It follows the Camera tab's rotation, mirror and fit — the same camera as the e-ink.</p>
+        </div>
+      </div>
+      <details class="more">
+        <summary>Wiring &amp; pins</summary>
+        <div class="more-body">
+          <p class="hint">VCC → 3.3V, GND → GND, DIN → GPIO10 (MOSI), CLK → GPIO11 (SCLK), then the four below.
+          These defaults keep clear of the e-ink HAT (which uses CE0, DC 25, RST 17, BUSY 24 and PWR 18 —
+          so the LCD's backlight can't go on 18 the way Waveshare's examples have it).</p>
+          <div class="keys">
+            <label class="field"><span>CS</span><select data-setting="lcd.cs"><option value="1">CE1 (GPIO7)</option><option value="0">CE0 (GPIO8)</option></select></label>
+            <label class="field"><span>DC</span><input type="number" min="0" max="27" data-setting="lcd.dc" inputmode="numeric"></label>
+            <label class="field"><span>RST</span><input type="number" min="0" max="27" data-setting="lcd.rst" inputmode="numeric"></label>
+            <label class="field"><span>BL</span><input type="number" min="0" max="27" data-setting="lcd.bl" inputmode="numeric"></label>
+            <label class="field"><span>SPI clock</span>
+              <select data-setting="lcd.speed_hz"><option value="8000000">8 MHz</option><option value="16000000">16 MHz</option><option value="24000000">24 MHz</option><option value="32000000">32 MHz</option><option value="40000000">40 MHz</option></select></label>
+          </div>
+          <p class="hint">40 MHz is Waveshare's own figure and fine over short jumpers. If the picture is noisy or the colours wrong,
+          try 16 MHz: if that cures it, the wires are the problem; if a fault stays exactly the same at 8 MHz, it isn't the wires.
+          The <b>Test card</b> screen shows the glass at its finest.</p>
+        </div>
+      </details>
+      <p class="hint" id="lcd-note"></p>
+    </div>
+    <div class="group" id="keys-group" hidden>
+      <span class="group-label" id="keys-label">Keys on the HAT</span>
+      <p class="hint">What each key does. "Prev / Next" turn pages in Read, step coins in Crypto, and fetch a new joke or fortune in Message. Any key wakes the screen when it's off.</p>
+      <div class="keys" id="keys">
+        <label class="field"><span>KEY1</span><select data-setting="buttons.key1" class="key-select"></select><button class="ghost" data-key="1">Press</button></label>
+        <label class="field"><span>KEY2</span><select data-setting="buttons.key2" class="key-select"></select><button class="ghost" data-key="2">Press</button></label>
+        <label class="field"><span>KEY3</span><select data-setting="buttons.key3" class="key-select"></select><button class="ghost" data-key="3">Press</button></label>
+        <label class="field"><span>KEY4</span><select data-setting="buttons.key4" class="key-select"></select><button class="ghost" data-key="4">Press</button></label>
+      </div>
+    </div>    </div>
+    <div class="pane" data-pane="sound" hidden>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Speaker &amp; voice</span>
+        <label class="switch" title="PiE-ink's voice and music come out of this phone or computer instead of the Pi's speaker"><input type="checkbox" class="here-switch"><span>Play on this device</span></label>
+      </div>
+      <p class="hint here-note" hidden></p>
+      <div class="field-row tight">
+        <label class="field"><span>Output</span><select data-setting="audio.device" id="mu-device"></select></label>
+        <label class="field"><span>Voice</span><select data-setting="audio.piper_voice" id="piper-voice"></select></label>
+        <label class="field">
+          <span>Speed <output id="piper-speed-out"></output></span>
+          <input type="range" min="0.6" max="1.6" step="0.1" data-setting="audio.piper_speed">
+        </label>
+      </div>
+      <label class="field">
+        <span>Volume <output id="snd-volume-out"></output></span>
+        <input type="range" min="0" max="100" step="5" id="snd-volume">
+      </label>
+      <p class="hint" id="snd-volume-note"></p>
+      <details class="more" id="piper-box">
+        <summary>Add a voice</summary>
+        <div class="more-body">
+          <button class="secondary" id="piper-install" hidden>Install Piper on the Pi</button>
+          <div class="key-row">
+            <select id="piper-get"></select>
+            <button class="ghost" id="piper-download">Get it</button>
+          </div>
+          <div class="key-row">
+            <input type="url" id="piper-url" placeholder="…or a link to any .onnx voice" spellcheck="false" autocomplete="off">
+            <button class="ghost" id="piper-url-add">Add</button>
+          </div>
+          <p class="hint">Any Piper voice works: paste the link to its <code>.onnx</code> file and the
+          settings file beside it comes too, or copy the pair into <code>data/voices</code>.</p>
+        </div>
+      </details>
+      <div class="draw-actions">
+        <button class="ghost" id="mu-test">Test the speaker</button>
+        <button class="ghost" id="snd-why" title="Check the USB bus, the sound cards, the power and the kernel log, and say what's wrong">Speaker or mic missing?</button>
+        <button class="ghost" id="snd-watch" title="Plug the speaker or mic in while this watches, and see what the Pi makes of it, as it happens">Watch the USB bus</button>
+      </div>
+      <p class="hint" id="mu-audio-hint"></p>
+      <pre class="log" id="snd-probe" hidden></pre>
+      <pre class="log" id="snd-watch-log" hidden></pre>
+      <div class="draw-actions" id="snd-pause-row" hidden>
+        <button class="secondary" id="snd-pause" title="Nothing uses the camera for two minutes: the speaker and mic get the USB link to themselves while you plug them in">Pause the camera for 2 minutes</button>
+      </div>
+    </div>    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Listen for a wake phrase</span>
+        <label class="switch"><input type="checkbox" data-setting="listen.enabled"><span>On</span></label>
+      </div>
+      <div class="field-row tight">
+        <label class="field"><span>Microphone</span><select data-setting="listen.device" id="ear-device"></select></label>
+        <label class="field"><span>Wake phrase</span><input type="text" data-setting="listen.wake" placeholder="hey cool beans" autocomplete="off"></label>
+        <label class="field"><span>Model</span><select data-setting="listen.model" id="ear-model"></select></label>
+      </div>
+      <details class="more" id="ear-box">
+        <summary>Set up listening</summary>
+        <div class="more-body">
+          <button class="secondary" id="ear-install" hidden>Install the listener on the Pi</button>
+          <div class="key-row">
+            <select id="ear-get"></select>
+            <button class="ghost" id="ear-download">Get it</button>
+          </div>
+          <button class="ghost" id="ear-test">Test the microphone</button>
+          <p class="hint"><code>setup.sh</code> installs the listener and its speech model, so this
+          should be ready — just switch it on and pick your microphone. Speech is recognised on the Pi
+          itself, nothing is sent anywhere. Say your phrase, then ask your question; it answers on the
+          screen and out loud. Leave the phrase empty and it answers everything it hears.</p>
+        </div>
+      </details>
+      <p class="hint" id="ear-hint"></p>
+    </div>    </div>
+    <div class="pane" data-pane="auto" hidden>
+      <div class="group">
+        <div class="group-row">
+          <span class="group-label">Watching the room</span>
+          <label class="switch"><input type="checkbox" data-setting="camera_watch.enabled"><span>On</span></label>
+        </div>
+        <p class="hint">It compares a small picture every few seconds, which costs almost nothing, and
+        only wakes the model when enough has changed.</p>
+        <div class="field-row tight">
+          <label class="field">
+            <span>Look every <output id="watch-interval-out"></output></span>
+            <input type="range" min="2" max="60" step="2" data-setting="camera_watch.interval">
+          </label>
+          <label class="field">
+            <span>Notice a <output id="watch-sens-out"></output> change</span>
+            <input type="range" min="4" max="40" step="2" data-setting="camera_watch.sensitivity">
+          </label>
+          <label class="field">
+            <span>Speak at most every <output id="watch-quiet-out"></output></span>
+            <input type="range" min="1" max="30" data-setting="camera_watch.quiet_minutes">
+          </label>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="camera_watch.describe"><span>Say what it sees</span></label>
+          <label class="switch"><input type="checkbox" data-setting="camera_watch.speak"><span>Out loud</span></label>
+        </div>
+        <p class="hint" id="watch-note"></p>
+      </div>
+      <div class="group">
+        <div class="group-row">
+          <span class="group-label">What it notices</span>
+          <label class="switch"><input type="checkbox" data-setting="camera_watch.events"><span>Log events</span></label>
+        </div>
+        <p class="hint">Each look is compared with the last, and only changes are kept: <em>Person detected</em>, <em>Package detected</em>,
+        <em>Door opened</em>, <em>Cat entered room</em>, <em>Nobody detected</em>. A vision model on your Ollama box sees all of that;
+        OpenCV on the Pi alone sees people and cats.</p>
+        <div class="field-row tight">
+          <label class="field">
+            <span>How it looks</span>
+            <select data-setting="camera_watch.detector">
+              <option value="auto">Auto — the vision model, else basic</option>
+              <option value="model">Vision model (Ollama)</option>
+              <option value="basic">Basic, on the Pi (people, cats)</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Telegram</span>
+            <select data-setting="camera_watch.notify_events">
+              <option value="notable">The notable ones</option>
+              <option value="all">Every event</option>
+              <option value="off">None</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row tight">
+          <label class="field">
+            <span>Look at most every <output id="watch-gap-out"></output></span>
+            <input type="range" min="5" max="120" step="5" data-setting="camera_watch.look_gap">
+          </label>
+          <label class="field">
+            <span>Look when still every <output id="watch-check-out"></output></span>
+            <input type="range" min="0" max="60" step="5" data-setting="camera_watch.check_minutes">
+          </label>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="camera_watch.speak_events"><span>Say the notable ones out loud</span></label>
+        </div>
+        <p class="hint" id="events-detector"></p>
+      </div>
+    </div>
+    <div class="pane" data-pane="agent" hidden>
+      <div class="group">
+        <div class="group-row">
+          <span class="group-label">The agent</span>
+          <label class="switch"><input type="checkbox" data-setting="agent.enabled"><span>On</span></label>
+        </div>
+        <p class="hint">Every few minutes it takes in what the camera, the GPS, Home Assistant, the Pi and the other Pis show, thinks it
+        over against your goals with the bot, and acts only in the ways you allow below. Each check goes in the journal.</p>
+        <label class="field">
+          <span>Goals, one per line</span>
+          <textarea rows="4" data-setting="agent.goals" placeholder="Keep an eye on the room.&#10;Tell me if something unusual happens.&#10;Watch the printer and tell me when it stops."></textarea>
+        </label>
+        <div class="field-row tight">
+          <label class="field">
+            <span>Check every <output id="agent-every-out"></output></span>
+            <input type="range" min="2" max="120" step="2" data-setting="agent.every_minutes">
+          </label>
+          <label class="field">
+            <span>Servers to keep an eye on</span>
+            <input type="text" data-setting="agent.watch_urls" placeholder="http://nas.local:5000, 192.168.1.20" spellcheck="false" autocomplete="off">
+          </label>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="agent.look"><span>Look through the camera</span></label>
+          <label class="switch agent-turns" hidden><input type="checkbox" data-setting="agent.can_look"><span>May turn the camera to look</span></label>
+          <label class="switch agent-turns" hidden><input type="checkbox" data-setting="agent.sweep"><span>Look around every check</span></label>
+          <label class="switch"><input type="checkbox" data-setting="agent.can_notify"><span>May message my phone</span></label>
+          <label class="switch"><input type="checkbox" data-setting="agent.can_say"><span>May speak</span></label>
+          <label class="switch"><input type="checkbox" data-setting="agent.can_show"><span>May put a line on the screen</span></label>
+          <label class="switch"><input type="checkbox" data-setting="agent.can_home"><span>May control the home</span></label>
+        </div>
+        <div class="draw-actions">
+          <span class="hint" id="agent-note">Off.</span>
+          <span class="spacer"></span>
+          <button class="ghost" id="agent-run">Check now</button>
+          <button class="ghost" id="agent-clear">Clear the journal</button>
+        </div>
+        <ul class="events journal" id="agent-journal"><li class="empty">No checks yet.</li></ul>
+      </div>
+    </div>
+    <div class="pane" data-pane="buddy" hidden>
+      <div class="group">
+        <div class="group-row">
+          <span class="group-label">Little friend</span>
+          <label class="switch"><input type="checkbox" data-setting="buddy.enabled"><span>On</span></label>
+        </div>
+        <p class="hint">It looks around the room by itself, smiles and says hello when it sees you or anyone, and is surprised
+        by what's new. A vision model on your Ollama box gives it its own words; without one, OpenCV on the Pi spots faces.</p>
+        <div class="field-row tight">
+          <label class="field">
+            <span>Looks somewhere new every <output id="buddy-every-out"></output></span>
+            <input type="range" min="15" max="300" step="5" data-setting="buddy.every_seconds">
+          </label>
+          <label class="field">
+            <span>Turns up to <output id="buddy-reach-out"></output></span>
+            <input type="range" min="20" max="120" step="5" data-setting="buddy.reach">
+          </label>
+          <label class="field">
+            <span>Says hello again after <output id="buddy-greet-out"></output></span>
+            <input type="range" min="1" max="120" data-setting="buddy.greet_minutes">
+          </label>
+          <label class="field" title="A gimbal's motors run hot when they're kept at it: however keen the settings above, the camera turns at most this long in ten minutes, then the friend holds still">
+            <span>Turns at most <output id="buddy-rest-out"></output> in 10 min</span>
+            <input type="range" min="10" max="300" step="10" data-setting="buddy.rest">
+          </label>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="buddy.talk"><span>Says it out loud</span></label>
+          <label class="switch"><input type="checkbox" data-setting="buddy.show_face"><span>Puts its face on the screen</span></label>
+          <label class="switch"><input type="checkbox" data-setting="buddy.night"><span>Sleeps at night</span></label>
+        </div>
+        <div class="field-row tight" id="buddy-night-row">
+          <label class="field"><span>Sleeps from</span><input type="time" data-setting="buddy.sleep_from"></label>
+          <label class="field"><span>Wakes at</span><input type="time" data-setting="buddy.sleep_to"></label>
+        </div>
+        <p class="hint">It turns slowly around home and stays a while at each spot (Camera → Turning sets how fast), never
+        lower than <em>Lowest it looks</em>, and keeps still while you steer or Follow me is on.</p>
+        <p class="hint" id="buddy-pane-note"></p>
+      </div>
+    </div>
+    <div class="pane" data-pane="cycle" hidden>
+    <div class="group">
+      <div class="group-row">
+        <span class="group-label">Cycle through screens</span>
+        <label class="switch"><input type="checkbox" data-setting="cycle.enabled"><span>On</span></label>
+      </div>
+      <p class="hint">A slideshow: it moves on to the next ticked screen after each interval, in the
+      order shown. Picking a screen by hand gives it a full turn before moving on.</p>
+      <label class="field">
+        <span>Every <output id="cycle-out"></output></span>
+        <input type="range" min="10" max="600" step="10" data-setting="cycle.seconds">
+      </label>
+      <div class="switches" id="cycle-screens"></div>
+    </div>
+    </div>
+    <div class="pane" data-pane="telegram" hidden>
+      <div class="group">
+        <span class="group-label">Telegram</span>
+        <p class="hint">Message your Pi from anywhere, and have it message you. In Telegram, talk to
+        <b>@BotFather</b>, send <code>/newbot</code>, and paste the token it gives you here.</p>
+        <label class="field"><span>Bot token</span>
+          <input type="text" data-setting="telegram.token" placeholder="123456789:ABCdef…" autocomplete="off" spellcheck="false"></label>
+        <div class="more" id="tg-pair">
+          <p class="hint" id="tg-note"></p>
+          <div class="draw-actions">
+            <button class="ghost" id="tg-test">Send a test message</button>
+            <span class="spacer"></span>
+            <button class="ghost" id="tg-unpair">Unpair</button>
+          </div>
+        </div>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="telegram.notify_room"><span>Tell me when it sees something</span></label>
+          <label class="switch"><input type="checkbox" data-setting="telegram.notify_friends"><span>…and when a friend's Pi sends something</span></label>
+          <label class="switch"><input type="checkbox" data-setting="telegram.notify_remarks"><span>…and its unprompted remarks</span></label>
+        </div>
+        <p class="hint">From the chat: <code>/screen weather</code>, <code>/photo</code>, <code>/panel</code>,
+        <code>/say hello</code>, <code>/message bins tonight</code>, <code>/status</code>, <code>/tv</code> (a remote
+        with buttons, once Home Assistant is set up), <code>/help</code> — anything else is a question for the bot.</p>
+      </div>
+    </div>
+    <div class="pane" data-pane="home" hidden>
+      <div class="group">
+        <span class="group-label">Home Assistant</span>
+        <p class="hint">Say <i>turn on the living room tv</i>, <i>go to channel 5452</i>, <i>volume up</i>, <i>mute</i>,
+        <i>open netflix</i> — to the wake phrase, in the chat bar, or from Telegram — and it goes through your
+        Home Assistant. In Home Assistant, open your profile → <b>Security</b> → <b>Long-lived access tokens</b> →
+        <b>Create token</b>, and paste it here.</p>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="home.enabled"><span>Use Home Assistant</span></label>
+          <label class="switch"><input type="checkbox" data-setting="home.others"><span>"Turn off the lamp" — anything else it knows by name</span></label>
+          <label class="switch"><input type="checkbox" data-setting="home.say_back"><span>Say it back ("TV on")</span></label>
+        </div>
+        <label class="field"><span>Address</span>
+          <input type="text" data-setting="home.url" placeholder="http://homeassistant.local:8123" autocomplete="off" spellcheck="false" inputmode="url"></label>
+        <label class="field"><span>Long-lived access token</span>
+          <input type="password" data-setting="home.token" placeholder="eyJhbGciOi…" autocomplete="off"></label>
+        <div class="draw-actions">
+          <span class="hint" id="home-note">…</span>
+          <span class="spacer"></span>
+          <button class="ghost" id="home-check">Check</button>
+        </div>
+        <div class="field-row tight">
+          <label class="field"><span>The TV</span><select data-setting="home.tv" id="home-tv" class="words"><option value="">— pick one —</option></select></label>
+          <label class="field"><span>Its remote</span><select data-setting="home.remote" id="home-remote" class="words"><option value="">none</option></select></label>
+        </div>
+        <div class="field-row tight">
+          <label class="field"><span>Brand</span><select data-setting="home.preset" id="home-preset" class="words"></select></label>
+          <label class="field"><span>What you call it</span>
+            <input type="text" data-setting="home.names" placeholder="living room tv, tv, television" autocomplete="off"></label>
+        </div>
+        <p class="hint">The remote entity is what channel digits, arrows and <i>press home</i> go through; power, volume,
+        mute, channels by number and <i>open netflix</i> only need the TV itself. Commas separate the names.</p>
+        <details class="more" id="home-try">
+          <summary>Try it</summary>
+          <div class="more-body">
+            <div class="home-keys">
+              <button class="ghost" data-say="turn on the tv">On</button>
+              <button class="ghost" data-say="turn off the tv">Off</button>
+              <button class="ghost" data-say="volume down">Vol −</button>
+              <button class="ghost" data-say="volume up">Vol +</button>
+              <button class="ghost" data-say="mute">Mute</button>
+              <button class="ghost" data-say="channel down">Ch −</button>
+              <button class="ghost" data-say="channel up">Ch +</button>
+            </div>
+            <form class="draw-actions" id="home-say-form">
+              <input type="text" id="home-say" placeholder="go to channel 5452 · open netflix · turn off the lamp" autocomplete="off">
+              <button class="ghost" type="submit">Do it</button>
+            </form>
+            <p class="hint" id="home-result"></p>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="pane" data-pane="pi" hidden>
+    <div class="group">
+      <span class="group-label">Pi</span>
+      <div class="power">
+        <button class="ghost icon wide" id="btn-update" title="apt update &amp;&amp; apt upgrade"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 16h12"/></svg> Update</button>
+        <button class="ghost icon wide" id="btn-reboot" title="Reboot the Pi"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg> Reboot</button>
+        <button class="ghost danger icon wide" id="btn-shutdown" title="Shut the Pi down"><svg viewBox="0 0 20 20"><path d="M10 3v7"/><path d="M6 5.5a6 6 0 1 0 8 0"/></svg> Shut down</button>
+      </div>
+      <pre class="log" id="upd-log" hidden></pre>
+      <p class="hint" id="upd-hint"></p>
+    </div>    </div>
+  </div>
+  <div class="sheet-foot">
+    <span class="hint" id="settings-note"></span>
+    <button class="primary" id="settings-save" disabled>Save settings</button>
+  </div>
+</div>
+<div class="scrim" id="settings-scrim" hidden></div>
+
+
+<aside class="side" id="side">
+<div class="chatlog" id="chatlog" hidden>
+  <div class="chatlog-head">
+    <span>Conversation</span>
+    <span class="spacer"></span>
+    <button class="ghost icon" id="chat-clear" title="Clear">Clear</button>
+    <button class="ghost icon" id="chat-collapse" title="Hide the conversation" aria-label="Hide the conversation"><svg viewBox="0 0 20 20"><path d="M12 4l-6 6 6 6"/></svg></button>
+  </div>
+  <div class="bubbles" id="bubbles"></div>
+</div>
+<div class="chat-latest" id="chat-latest" hidden><span id="chat-latest-text"></span></div>
+<form class="chatbar" id="chatbar" autocomplete="off">
+  <button type="button" class="chat-icon" id="group-btn" aria-label="Group chat" title="Group chat with the other PiE-inks">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0M14 18a4.5 4.5 0 0 1 7 0"/></svg>
+    <span class="dot" id="group-dot" hidden></span>
+  </button>
+  <button type="button" class="chat-icon" id="bot-btn" aria-label="The bot" title="Set the bot up">
+    <svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/><path d="M12 4v3M8.5 19v1.5M15.5 19v1.5M2.5 12v3M21.5 12v3"/></svg>
+  </button>
+  <input type="text" id="chat-input" placeholder="Say something to the bot…">
+  <button type="button" class="chat-icon" id="chat-toggle" aria-label="Conversation" title="Conversation">
+    <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+  </button>
+  <button type="submit" class="chat-send" id="chat-send" aria-label="Send">
+    <svg viewBox="0 0 24 24"><path d="M4 12l16-7-7 16-2-7z"/></svg>
+  </button>
+</form>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/static/vendor/leaflet/leaflet.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

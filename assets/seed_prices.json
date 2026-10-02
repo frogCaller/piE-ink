@@ -1,0 +1,328 @@
+{
+ "as_of": "2026-06-01",
+ "coins": {
+  "bitcoin": {
+   "price": 105000,
+   "ath": 126000,
+   "ath_date": "2025-10-06",
+   "market_cap": 2100000000000.0,
+   "rank": 1,
+   "total_supply": 21000000,
+   "circulating_supply": 19900000,
+   "sentiment_up": 72,
+   "high_24h": 107000,
+   "low_24h": 103000,
+   "change": {
+    "24h": 0.8,
+    "7d": -2.1,
+    "30d": 4.5,
+    "200d": 12.0,
+    "1y": 45.0
+   }
+  },
+  "ethereum": {
+   "price": 3900,
+   "ath": 4890,
+   "ath_date": "2021-11-10",
+   "market_cap": 470000000000.0,
+   "rank": 2,
+   "total_supply": 120500000,
+   "circulating_supply": 120500000,
+   "sentiment_up": 68,
+   "high_24h": 3980,
+   "low_24h": 3820,
+   "change": {
+    "24h": 1.1,
+    "7d": -3.0,
+    "30d": 6.2,
+    "200d": 18.0,
+    "1y": 30.0
+   }
+  },
+  "tether": {
+   "price": 1.0,
+   "ath": 1.32,
+   "ath_date": "2018-07-24",
+   "market_cap": 160000000000.0,
+   "rank": 3,
+   "total_supply": 160000000000.0,
+   "circulating_supply": 160000000000.0,
+   "sentiment_up": 60,
+   "high_24h": 1.001,
+   "low_24h": 0.999,
+   "change": {
+    "24h": 0.0,
+    "7d": 0.0,
+    "30d": 0.0,
+    "200d": 0.0,
+    "1y": 0.0
+   }
+  },
+  "ripple": {
+   "price": 2.6,
+   "ath": 3.65,
+   "ath_date": "2025-07-18",
+   "market_cap": 150000000000.0,
+   "rank": 4,
+   "total_supply": 100000000000.0,
+   "circulating_supply": 59000000000.0,
+   "sentiment_up": 70,
+   "high_24h": 2.7,
+   "low_24h": 2.5,
+   "change": {
+    "24h": 1.5,
+    "7d": -4.0,
+    "30d": 8.0,
+    "200d": 20.0,
+    "1y": 50.0
+   }
+  },
+  "binancecoin": {
+   "price": 720,
+   "ath": 1370,
+   "ath_date": "2025-10-13",
+   "market_cap": 100000000000.0,
+   "rank": 5,
+   "total_supply": 139000000.0,
+   "circulating_supply": 139000000.0,
+   "sentiment_up": 66,
+   "high_24h": 735,
+   "low_24h": 705,
+   "change": {
+    "24h": 0.5,
+    "7d": -1.0,
+    "30d": 3.0,
+    "200d": 10.0,
+    "1y": 25.0
+   }
+  },
+  "solana": {
+   "price": 190,
+   "ath": 295,
+   "ath_date": "2025-01-19",
+   "market_cap": 100000000000.0,
+   "rank": 6,
+   "total_supply": 610000000.0,
+   "circulating_supply": 540000000.0,
+   "sentiment_up": 71,
+   "high_24h": 196,
+   "low_24h": 184,
+   "change": {
+    "24h": 2.0,
+    "7d": -5.0,
+    "30d": 9.0,
+    "200d": 15.0,
+    "1y": 20.0
+   }
+  },
+  "usd-coin": {
+   "price": 1.0,
+   "ath": 1.17,
+   "ath_date": "2019-05-08",
+   "market_cap": 75000000000.0,
+   "rank": 7,
+   "total_supply": 75000000000.0,
+   "circulating_supply": 75000000000.0,
+   "sentiment_up": 60,
+   "high_24h": 1.001,
+   "low_24h": 0.999,
+   "change": {
+    "24h": 0.0,
+    "7d": 0.0,
+    "30d": 0.0,
+    "200d": 0.0,
+    "1y": 0.0
+   }
+  },
+  "dogecoin": {
+   "price": 0.22,
+   "ath": 0.73,
+   "ath_date": "2021-05-08",
+   "market_cap": 33000000000.0,
+   "rank": 8,
+   "total_supply": 150000000000.0,
+   "circulating_supply": 150000000000.0,
+   "sentiment_up": 74,
+   "high_24h": 0.23,
+   "low_24h": 0.21,
+   "change": {
+    "24h": 1.8,
+    "7d": -6.0,
+    "30d": 10.0,
+    "200d": 5.0,
+    "1y": 40.0
+   }
+  },
+  "cardano": {
+   "price": 0.75,
+   "ath": 3.09,
+   "ath_date": "2021-09-02",
+   "market_cap": 27000000000.0,
+   "rank": 9,
+   "total_supply": 45000000000.0,
+   "circulating_supply": 36000000000.0,
+   "sentiment_up": 67,
+   "high_24h": 0.78,
+   "low_24h": 0.73,
+   "change": {
+    "24h": 1.0,
+    "7d": -3.5,
+    "30d": 5.0,
+    "200d": 8.0,
+    "1y": 15.0
+   }
+  },
+  "tron": {
+   "price": 0.32,
+   "ath": 0.43,
+   "ath_date": "2024-12-03",
+   "market_cap": 30000000000.0,
+   "rank": 10,
+   "total_supply": 86000000000.0,
+   "circulating_supply": 86000000000.0,
+   "sentiment_up": 65,
+   "high_24h": 0.33,
+   "low_24h": 0.31,
+   "change": {
+    "24h": 0.4,
+    "7d": -1.0,
+    "30d": 2.0,
+    "200d": 12.0,
+    "1y": 35.0
+   }
+  },
+  "avalanche-2": {
+   "price": 28,
+   "ath": 145,
+   "ath_date": "2021-11-21",
+   "market_cap": 12000000000.0,
+   "rank": 14,
+   "total_supply": 720000000.0,
+   "circulating_supply": 420000000.0,
+   "sentiment_up": 64,
+   "high_24h": 29,
+   "low_24h": 27,
+   "change": {
+    "24h": 1.2,
+    "7d": -4.0,
+    "30d": 6.0,
+    "200d": -5.0,
+    "1y": 10.0
+   }
+  },
+  "chainlink": {
+   "price": 17,
+   "ath": 52.7,
+   "ath_date": "2021-05-10",
+   "market_cap": 11000000000.0,
+   "rank": 15,
+   "total_supply": 1000000000.0,
+   "circulating_supply": 680000000.0,
+   "sentiment_up": 69,
+   "high_24h": 17.6,
+   "low_24h": 16.5,
+   "change": {
+    "24h": 1.4,
+    "7d": -2.5,
+    "30d": 7.0,
+    "200d": 9.0,
+    "1y": 22.0
+   }
+  },
+  "shiba-inu": {
+   "price": 1.3e-05,
+   "ath": 8.62e-05,
+   "ath_date": "2021-10-28",
+   "market_cap": 7700000000.0,
+   "rank": 20,
+   "total_supply": 589000000000000.0,
+   "circulating_supply": 589000000000000.0,
+   "sentiment_up": 66,
+   "high_24h": 1.35e-05,
+   "low_24h": 1.26e-05,
+   "change": {
+    "24h": 1.0,
+    "7d": -5.0,
+    "30d": 4.0,
+    "200d": -8.0,
+    "1y": 12.0
+   }
+  },
+  "litecoin": {
+   "price": 95,
+   "ath": 410,
+   "ath_date": "2021-05-10",
+   "market_cap": 7200000000.0,
+   "rank": 22,
+   "total_supply": 84000000.0,
+   "circulating_supply": 76000000.0,
+   "sentiment_up": 63,
+   "high_24h": 97,
+   "low_24h": 93,
+   "change": {
+    "24h": 0.7,
+    "7d": -2.0,
+    "30d": 3.0,
+    "200d": 6.0,
+    "1y": 18.0
+   }
+  },
+  "polkadot": {
+   "price": 4.5,
+   "ath": 54.98,
+   "ath_date": "2021-11-04",
+   "market_cap": 7000000000.0,
+   "rank": 25,
+   "total_supply": 1600000000.0,
+   "circulating_supply": 1550000000.0,
+   "sentiment_up": 62,
+   "high_24h": 4.7,
+   "low_24h": 4.4,
+   "change": {
+    "24h": 0.9,
+    "7d": -3.0,
+    "30d": 4.0,
+    "200d": -10.0,
+    "1y": -5.0
+   }
+  },
+  "monero": {
+   "price": 300,
+   "ath": 542,
+   "ath_date": "2018-01-09",
+   "market_cap": 5500000000.0,
+   "rank": 28,
+   "total_supply": null,
+   "circulating_supply": 18400000.0,
+   "sentiment_up": 70,
+   "high_24h": 306,
+   "low_24h": 294,
+   "change": {
+    "24h": 0.6,
+    "7d": -1.5,
+    "30d": 5.0,
+    "200d": 25.0,
+    "1y": 60.0
+   }
+  },
+  "verus-coin": {
+   "price": 1.9,
+   "ath": 3.1,
+   "ath_date": "2025-01-05",
+   "market_cap": 150000000.0,
+   "rank": 300,
+   "total_supply": 83500000.0,
+   "circulating_supply": 78000000.0,
+   "sentiment_up": 80,
+   "high_24h": 2.0,
+   "low_24h": 1.8,
+   "change": {
+    "24h": 2.5,
+    "7d": -3.0,
+    "30d": 12.0,
+    "200d": 40.0,
+    "1y": 90.0
+   }
+  }
+ }
+}

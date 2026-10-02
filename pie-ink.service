@@ -1,0 +1,18 @@
+[Unit]
+Description=PiE-ink display and web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=GPIOZERO_PIN_FACTORY=lgpio
+ExecStart=/usr/bin/python3 __DIR__/app.py
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# The Pi reads these files, so they keep Unix line endings wherever the repo passes through
+# (a Windows checkout copied over to the Pi would otherwise break setup.sh and the service file).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ttf binary
+*.ttc binary

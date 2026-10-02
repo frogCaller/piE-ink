@@ -1,0 +1,11 @@
+# Only needed if you are not using the apt packages from setup.sh.
+# Pi-specific packages (picamera2, lgpio, spidev, gpiozero) come from apt.
+Flask
+Pillow
+PyYAML
+requests
+psutil
+numpy
+waitress
+beautifulsoup4
+pyserial
