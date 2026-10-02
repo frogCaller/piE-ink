@@ -24,11 +24,17 @@ screen, setting and button.
 ## Parts
 
 - A Raspberry Pi (Zero 2 W through Pi 5) and a [micro SD card](https://amzn.to/4hEMYF4)
-- One of: a [2.13" e-Paper HAT](https://amzn.to/4zeRSzU) (V3 or V4), a 2.7"
-  e-Paper HAT (V2 recommended), a 3.7" e-Paper HAT, [GPIO extender](https://amzn.to/3VeFst4), [GPIO splitter](https://amzn.to/3TdY9MU)
-- Optional: a [UPS HAT](https://amzn.to/4yvY6LE); a Pi camera or USB webcam; a USB speaker
-  and microphone; a [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) as a second, colour screen; a
-  [USB GPS receiver](https://amzn.to/4rMy5oP)
+- [2.13" e-Paper HAT](https://amzn.to/4zeRSzU) (V3 or V4) | 2.7" e-Paper HAT (V2 recommended) | 3.7" e-Paper HAT,
+- [GPIO extender](https://amzn.to/3VeFst4);
+- [GPIO splitter](https://amzn.to/3TdY9MU);
+Optional:
+- [UPS HAT](https://amzn.to/4yvY6LE);
+- [Waveshare USB Hat](https://amzn.to/4j0LMye);
+- [USB GPS receiver](https://amzn.to/4rMy5oP);
+- [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) as a second, color screen;
+- Pi camera or USB webcam;
+- USB speaker;
+- USB microphone;
 
 (Amazon affiliate links)
 
