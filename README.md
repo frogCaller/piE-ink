@@ -18,9 +18,6 @@ and **3.7"** e-Paper HATs, and the PiSugar **Whisplay** HAT (a colour LCD
 with a speaker, microphones, a button and an LED). Every screen has a layout
 for each size.
 
-This is the short version. [docs/guide.md](docs/guide.md) goes through every
-screen, setting and button.
-
 ## Parts
 
 - A Raspberry Pi (Zero 2 W through Pi 5) and a [micro SD card](https://amzn.to/4hEMYF4)
@@ -180,8 +177,6 @@ waveshare_epd/         Waveshare's drivers
 assets/                fonts, icons, jokes, fortunes, topics, seed prices
 data/                  your books, drawings, coins, photos and cache (made at runtime)
 ```
-
-The [guide](docs/guide.md#layout) names every file.
 
 ## Troubleshooting
 
