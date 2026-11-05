@@ -1,12 +1,14 @@
 """Small marks laid over whatever screen is showing.
 
-The one that exists so far: two little speech bubbles in a corner while the
-bots on two PiE-inks are talking to each other, so you can tell at a glance
-without opening the page. It is drawn onto the finished frame, so no screen
-has to know about it, and it stays off the group-chat screen itself, where
-the conversation is the whole picture.
+Two little speech bubbles in a corner while the bots on two PiE-inks are talking to each other,
+so you can tell at a glance without opening the page (kept off the group-chat screen itself,
+where the conversation is the whole picture); and a toast — a few words in a box along the
+bottom for a moment, saying what a button did when the screen alone wouldn't ("Photo saved",
+"Dark") or what the bot just said. Drawn onto the finished frame, so no screen has to know.
 """
 import logging
+import threading
+import time
 
 from PIL import ImageDraw
 
@@ -33,8 +35,67 @@ def _bubbles(draw, x, y, size, fg, bg):
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=bg)
 
 
+_toast = {"text": "", "until": 0.0}
+
+
+def toast(text, seconds=2.0, poke=None):
+    """A few words along the bottom of the screen for `seconds`. `poke` (the display's) redraws now, and
+    again when they've gone."""
+    _toast.update(text=" ".join(str(text or "").split()) if "\n" not in str(text or "") else str(text).strip(),
+                  until=time.time() + float(seconds))
+    if poke:
+        poke()
+        t = threading.Timer(float(seconds) + 0.05, poke)
+        t.daemon = True
+        t.start()
+
+
+def toasting():
+    """The words showing now, or ""."""
+    return _toast["text"] if time.time() < _toast["until"] else ""
+
+
+def _draw_toast(image, text, dark):
+    from .text import font, line_height, wrap
+    image = image.copy()
+    draw = ImageDraw.Draw(image)
+    w, h = image.size
+    base = min(w, h * 4 / 3) * 0.055
+    for scale in (1.0, 0.82, 0.68):                     # smaller for a longer line (a joke, what the bot said)
+        fnt = font("Font.ttc", max(9, round(base * scale)))
+        pad = max(3, round(fnt.size * 0.45))
+        lines = wrap(draw, text, fnt, int(w * 0.9) - 2 * pad) or [""]
+        if len(lines) <= 3:
+            break
+    lines = lines[:5]
+    lh = line_height(fnt)
+    tw = max(draw.textbbox((0, 0), ln, font=fnt)[2] for ln in lines)
+    bw, bh = min(w - 2 * pad, tw + 2 * pad), lh * len(lines) + 2 * pad
+    x0, y1 = (w - bw) // 2, h - max(2, round(h * 0.04))
+    y0 = y1 - bh
+    box, ink, edge = (0, 255, 255) if image.mode != "RGB" else ((24, 26, 30), (255, 255, 255), (255, 255, 255))
+    draw.rounded_rectangle([x0, y0, x0 + bw, y1], radius=max(2, pad), fill=box,
+                           outline=edge if dark else None, width=max(1, pad // 3))
+    for i, ln in enumerate(lines):
+        lw = draw.textbbox((0, 0), ln, font=fnt)[2]
+        draw.text((x0 + (bw - lw) // 2, y0 + pad + i * lh), ln, font=fnt, fill=ink)
+    return image
+
+
 def apply(image, config, mode_name=""):
     """Draw whatever marks apply onto this frame and hand it back."""
+    image = _bubbles_on(image, config, mode_name)
+    words = toasting()
+    if words and mode_name != "off":
+        try:
+            image = _draw_toast(image, words, config.get("display", {}).get("dark_mode", False))
+        except Exception:
+            log.debug("couldn't draw the toast", exc_info=True)
+    return image
+
+
+def _bubbles_on(image, config, mode_name=""):
+    """The two speech bubbles, while the bots talk."""
     try:
         from . import social
         if mode_name in ("groupchat", "off") or not social.talking():

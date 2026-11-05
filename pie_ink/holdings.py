@@ -1,7 +1,9 @@
-"""Your crypto: what you hold, what it is worth, and a word when that changes a lot.
+"""What you hold — coins and shares — what it is worth, and a word when that changes a lot.
 
-Put in how much of each coin you hold (the Crypto tab, under each coin) and
-the total is worked out from the same CoinGecko prices the screen shows —
+Put in how much of each coin or share you hold (the Finance tab, under each)
+and the total is worked out from the same prices the screen shows (CoinGecko's
+for a coin, Yahoo's for a share; a share priced in something other than US
+dollars is shown in its own currency and left out of the total) —
 plus whatever your miners have sitting at their pools, when those are on. A
 thread keeps the prices fresh whatever screen is up, keeps a week of readings
 of the total (data/holdings.json) so the page and the screen can show how
@@ -10,7 +12,8 @@ moments worth a word: the total passing the line you set (a million, say —
 you are rich), slipping back under it, a day's move of more than the share
 you set (a crash, or a rally), and a long slide well below the peak. Each
 goes to your phone, the events list and the bot — in its own words when it
-has a model. The bot knows the numbers all the time ("how's my crypto?").
+has a model. The bot knows the numbers all the time ("how's my crypto?",
+"how are my stocks?").
 """
 import json
 import logging
@@ -54,6 +57,18 @@ def signed(v):
 
 def _pct(v):
     return f"{v:+.1f}%" if v is not None else "N/A"
+
+
+def whose(v):
+    """"Your crypto", or "Your holdings" once a share is among them."""
+    return "Your holdings" if any(r.get("kind") == "stock" for r in (v or {}).get("items") or []) else "Your crypto"
+
+
+def _worth(r, v):
+    """A row's value as words: $1,234 — or £1,234.00 for a share in another currency."""
+    if r["symbol"] in (v.get("foreign") or []):
+        return f"{r.get('money', '')}{r['value']:,.2f}"
+    return money(r["value"])
 
 
 class Holdings:
@@ -130,16 +145,20 @@ class Holdings:
 
     def value(self, cached_only=True):
         """What it is all worth: {"total", "day" ($ since yesterday), "day_pct",
-        "items": [...], "unknown": [symbols with no price], "when"}. Prices come
+        "items": [...], "unknown": [symbols with no price], "foreign": [shares in
+        another currency, valued but not in the total], "when"}. Prices come
         from the cache unless asked otherwise (the thread asks; the page doesn't)."""
-        from . import coingecko
-        items, total, yesterday, unknown = [], 0.0, 0.0, []
+        from . import stocks, watchlist
+        items, total, yesterday, unknown, foreign = [], 0.0, 0.0, [], []
         for i in self.held():
-            d = coingecko.coin_data(i["id"], cached_only) or {}
+            d = watchlist.data(i, cached_only) or {}             # a coin's figures, or a share's
             price = d.get("price")
+            kind = watchlist.kind(i)
+            currency = (d.get("currency") or "USD") if kind == "stock" else "USD"
             row = {"id": i["id"], "symbol": i["symbol"], "name": i.get("name", i["symbol"]), "amount": i["amount"],
-                   "price": price, "value": None, "change_1d": None, "day": None,
-                   "seed": bool(d.get("seed")), "age": coingecko.coin_age(i["id"])}
+                   "price": price, "value": None, "change_1d": None, "day": None, "kind": kind,
+                   "money": stocks.money_sign(currency) if kind == "stock" else "$",
+                   "seed": bool(d.get("seed")), "age": watchlist.age(i)}
             if price is None:
                 unknown.append(i["symbol"])
             else:
@@ -147,8 +166,11 @@ class Holdings:
                 ch = (d.get("change") or {}).get("24h")
                 v0 = v / (1 + ch / 100.0) if ch is not None and ch > -99.9 else v
                 row.update(value=v, change_1d=ch, day=v - v0)
-                total += v
-                yesterday += v0
+                if currency == "USD":
+                    total += v
+                    yesterday += v0
+                else:                                           # pounds and dollars don't add up
+                    foreign.append(i["symbol"])
             items.append(row)
         try:
             from . import mining
@@ -166,7 +188,7 @@ class Holdings:
         items.sort(key=lambda r: -(r["value"] or 0))
         day = total - yesterday
         out = {"total": total, "day": day, "day_pct": (day / yesterday * 100.0) if yesterday > 0 else None,
-               "items": items, "unknown": unknown, "when": time.time(),
+               "items": items, "unknown": unknown, "foreign": foreign, "when": time.time(),
                "coins": sum(1 for r in items if not r.get("mined"))}
         with self._lock:
             self.value_now = out
@@ -295,7 +317,10 @@ class Holdings:
     def _watch(self, v, now):
         fire = []
         total, pct = v["total"], v["day_pct"]
-        top = ", ".join(f"{r['symbol']} {money(r['value'])}" for r in v["items"][:3] if r.get("value"))
+        yours = whose(v)
+        plural = yours == "Your holdings"
+        they = "they are" if plural else "it's"
+        top = ", ".join(f"{r['symbol']} {money(r['value'])}" for r in v["items"][:3] if r.get("value") and r["symbol"] not in v.get("foreign", []))
         line = self.line()
         if line:
             if self.over is None:
@@ -304,12 +329,12 @@ class Holdings:
             if not self.over and over_n >= READINGS:
                 self.over, self._counts["under"] = True, 0
                 if now - self._said.get("rich", 0) >= QUIET:
-                    fire.append(("rich", f"Your crypto just passed {money(line)}: it's worth {money(total)} now"
+                    fire.append(("rich", f"{yours} just passed {money(line)}: {they} worth {money(total)} now"
                                  + (f" ({top})" if top else "") + ". You're rich!"))
             elif self.over and under_n >= READINGS:
                 self.over, self._counts["over"] = False, 0
                 if now - self._said.get("under", 0) >= QUIET:
-                    fire.append(("under", f"Your crypto has slipped back under {money(line)}: {money(total)} now"
+                    fire.append(("under", f"{yours} {'have' if plural else 'has'} slipped back under {money(line)}: {money(total)} now"
                                  + (f", {_pct(pct)} today" if pct is not None else "") + "."))
         share = self.share()
         if pct is not None:
@@ -320,7 +345,7 @@ class Holdings:
                 if said is None or abs(pct) >= abs(said) + share:      # a word, and another if it goes a lot further
                     self.move = {"kind": kind, "pct": round(pct, 1), "since": (self.move or {}).get("since") or now}
                     movers = ", ".join(f"{r['symbol']} {_pct(r['change_1d'])}" for r in v["items"][:3] if r.get("change_1d") is not None)
-                    fire.append((kind, f"The market is {'down' if kind == 'crash' else 'up'}: your crypto is worth "
+                    fire.append((kind, f"The market is {'down' if kind == 'crash' else 'up'}: {yours.lower()} {'are' if plural else 'is'} worth "
                                  f"{money(total)}, {_pct(pct)} today ({signed(v['day'])})" + (f" — {movers}" if movers else "") + "."))
             if self.move and self._count("calm", abs(pct) < share / 2) >= READINGS:
                 self.move = None                           # the day's move has eased: the next one is news again
@@ -333,7 +358,7 @@ class Holdings:
                 if said is None or below >= said + share:
                     self.slump = {"since": (self.slump or {}).get("since") or now, "pct": round(below, 1)}
                     when = datetime.fromtimestamp(self.peak[1]).strftime("%b %-d")
-                    fire.append(("slump", f"Your crypto is {below:.0f}% below the most it has been worth "
+                    fire.append(("slump", f"{yours} {'are' if plural else 'is'} {below:.0f}% below the most {'they have' if plural else 'it has'} been worth "
                                  f"({money(self.peak[0])} on {when}): {money(total)} now."))
             if self.slump and below < share:
                 self.slump = None
@@ -363,8 +388,11 @@ class Holdings:
         v = self.value_now or (self.value() if self.any() else None)
         if not v or not v["items"]:
             return ""
-        bits = [f"worth {money(v['total'])} across {len(v['items'])} coin{'s' if len(v['items']) != 1 else ''}"
-                + " (" + ", ".join(f"{r['symbol']} {money(r['value'])}" for r in v["items"][:4] if r.get("value")) + ")"]
+        shares = any(r.get("kind") == "stock" for r in v["items"])
+        n = len(v["items"])
+        what = ("holding" if shares else "coin") + ("s" if n != 1 else "")
+        bits = [f"worth {money(v['total'])} across {n} {what}"
+                + " (" + ", ".join(f"{r['symbol']} {_worth(r, v)}" for r in v["items"][:4] if r.get("value")) + ")"]
         if v["day_pct"] is not None:
             bits.append(f"{'down' if v['day'] < 0 else 'up'} {abs(v['day_pct']):.1f}% today ({signed(v['day'])})")
         week = self.ago(7 * 86400)
@@ -383,18 +411,24 @@ class Holdings:
             bits.append(f"a {'CRASH' if self.move['kind'] == 'crash' else 'RALLY'} today")
         if v["unknown"]:
             bits.append("no price yet for " + ", ".join(v["unknown"]))
-        return "Your crypto holdings: " + "; ".join(bits)
+        if v.get("foreign"):
+            bits.append("not in the total, being in another currency: " + ", ".join(v["foreign"]))
+        return ("Your holdings (coins and shares): " if shares else "Your crypto holdings: ") + "; ".join(bits)
 
     def summary(self):
         """A few lines for Telegram or the page."""
         v = self.value()
         if not v["items"]:
-            return "No holdings yet — put in how much of each coin you hold under Crypto."
-        lines = [f"Your crypto: {money(v['total'])}"
+            return "No holdings yet — put in how much of each coin or share you hold under Finance."
+        lines = [f"{whose(v)}: {money(v['total'])}"
                  + (f", {_pct(v['day_pct'])} today ({signed(v['day'])})" if v["day_pct"] is not None else "")]
         for r in v["items"]:
             if r.get("value") is None:
                 lines.append(f"{r['symbol']}: {r['amount']:g} — no price yet")
+            elif r["symbol"] in v.get("foreign", []):
+                m = r.get("money", "")
+                lines.append(f"{r['symbol']}: {r['amount']:g} × {m}{r['price']:,.2f} = {_worth(r, v)}"
+                             + (f" ({_pct(r['change_1d'])})" if r.get("change_1d") is not None else "") + " — not in the total")
             else:
                 lines.append(f"{r['symbol']}: {r['amount']:g} × {money(r['price'])} = {money(r['value'])}"
                              + (f" ({_pct(r['change_1d'])})" if r.get("change_1d") is not None else "")

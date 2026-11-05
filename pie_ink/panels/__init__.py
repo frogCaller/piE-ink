@@ -2,9 +2,11 @@ from .base import Panel, to_bilevel, to_png
 from .eink import EInk27V1, EInk27V2, EInk37, EInk213V3, EInk213V4
 from .mock import MockEInk, MockEInk27, MockEInk37
 from .whisplay import Whisplay, MockWhisplay
+from .gpicase import GPiCase, MockGPiCase
+from .waveshare_lcd import Lcd169, Lcd19, MockLcd169, MockLcd19
 
-PANELS = {p.name: p for p in (EInk213V4, EInk213V3, EInk27V2, EInk27V1, EInk37, Whisplay,
-                              MockEInk, MockEInk27, MockEInk37, MockWhisplay)}
+PANELS = {p.name: p for p in (EInk213V4, EInk213V3, EInk27V2, EInk27V1, EInk37, Whisplay, Lcd169, Lcd19, GPiCase,
+                              MockEInk, MockEInk27, MockEInk37, MockWhisplay, MockLcd169, MockLcd19, MockGPiCase)}
 
 
 def make(display):

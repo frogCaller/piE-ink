@@ -6,14 +6,16 @@ camera controls — pan and tilt in arc-seconds (324000 is 90°), zoom in
 whatever units the camera uses — set straight from Python with the same
 ioctls v4l2-ctl uses, on the camera's own node, while it streams.
 
-The joystick on the Camera tab drives a speed, not a position: the page
-says where the stick is a few times a second, a thread here moves the
-target that far and writes pan and tilt together (one USB transfer, so a
-diagonal is a diagonal and one axis never cancels the other mid-move), and
-if the page goes quiet — a phone locked mid-drag — the camera stops. The
-bot turns it too: "look left", "look around", the agent's own looks. While
-it moves, the watcher knows the picture is changing because the camera
-did, not the room.
+Dragging the live view on the Camera tab points it: the page works out
+where the camera should look for the picture to follow the finger and
+sends that place a few times a second (set()). The arrow keys and a game
+controller drive a speed instead (drive(), "the stick" below): the page says
+how fast each way a few times a second, a thread here moves the target that
+far and writes pan and tilt together (one USB transfer, so a diagonal is a
+diagonal and one axis never cancels the other mid-move), and if the page
+goes quiet — a phone locked mid-turn — the camera stops. The bot turns it
+too: "look left", "look around", the agent's own looks. While it moves, the
+watcher knows the picture is changing because the camera did, not the room.
 
 An OBSBOT also follows people by itself. That is a switch here ("Follow
 me"), flipped through the camera's own vendor controls — the same bytes
@@ -22,7 +24,7 @@ or its habit of starting up tracking, gets put back within a few seconds.
 
 An OBSBOT left unused for a while falls asleep with its lens turned down,
 and asleep it ignores every move. Whenever PiE-ink uses the camera — the
-live view, the stick, the little friend, a photo — it asks whether the
+live view, a drag, the little friend, a photo — it asks whether the
 camera is asleep and, if it is, wakes it (OBSBOT's own "run" command) and
 points it back where it was.
 
@@ -119,6 +121,12 @@ STREAM_WAIT = 4.0                # how long a smooth turn waits for the camera t
 # turning by itself: easing in and out, at this many degrees a second on average
 GENTLE = 25.0
 SWEEP_HOLD = 2.0                 # a look around stops this long at each place, so you see it look
+NOD = 12.0                       # a nod goes this many degrees down and up
+SHAKE = 16.0                     # a shake, this many left and right
+TEMPO = 1.6                      # nods (or shakes) a second, unless the settings say otherwise
+GESTURE_STREAM_WAIT = 10.0       # a nod waits this long for the camera to stream (it takes speeds only then)
+EYES_OPEN = 45                   # after a nod the camera keeps streaming this long: the next one comes at once
+GESTURE_PEAK = 120.0             # a nod or shake never turns faster than this (°/s): a gimbal reversing hard draws current
 # errors that mean the camera is gone (unplugged, re-plugged) rather than busy for a moment
 _GONE = {errno.ENODEV, errno.ENXIO, errno.EBADF, errno.ENOENT, errno.ESHUTDOWN}
 
@@ -232,6 +240,7 @@ class Ptz:
         self._seq = {}                   # page -> the newest stick message seen, so a late one can't restart it
         self._driver = None
         self.looking = False             # a look around is under way
+        self.gesturing = None            # "nod" / "shake" / "tilt" while it answers with its head
         self.last_look = None            # {"ts", "text", "where"}
         self.busy_until = 0.0            # the camera was slow to take the last move: let it catch up
         self._err_logged = 0.0
@@ -423,7 +432,7 @@ class Ptz:
         picture changes because the camera moved, not the room. A camera
         that is following someone is always turning; one waking up lifts itself."""
         now = time.time()
-        return self.looking or self.gliding or self.driving() or now < self.move_until + after \
+        return self.looking or bool(self.gesturing) or self.gliding or self.driving() or now < self.move_until + after \
             or bool(self.follow_on) or now < self.waking_until
 
     def driving(self):
@@ -617,7 +626,7 @@ class Ptz:
         return (self.fd is not None and self.xu_unit is not None and not self.follow_on
                 and self.conf.get("smooth", True) is not False)
 
-    def _ready_to_speed(self, gen):
+    def _ready_to_speed(self, gen, wait=STREAM_WAIT):
         """It takes speeds only awake and streaming: have it stream, wake it
         if it's asleep, and let a move under way finish (a speed would cut
         it short). False when that takes too long, or another move comes."""
@@ -625,7 +634,7 @@ class Ptz:
         camera.CAMERA.touch(15)
         self.wake_soon("a move")
         self.wait_awake()
-        end = time.time() + STREAM_WAIT
+        end = time.time() + wait
         while True:
             if self._gen != gen or self.fd is None:
                 return False
@@ -813,9 +822,9 @@ class Ptz:
         with self._lock:
             if not self.available():
                 raise ValueError("no camera that turns is plugged in")
-            if self.looking or (self.follow_on and not self._paused):
+            if self.looking or self.gesturing or (self.follow_on and not self._paused):
                 self._vel = (0.0, 0.0)
-                return self.position()                   # it's looking around, or following you: the stick waits
+                return self.position()                   # it's looking around, nodding, or following you: the stick waits
             if sid:
                 if seq <= self._seq.get(sid, -1):
                     return self.position()               # overtaken by a newer message (a stop, say)
@@ -968,6 +977,166 @@ class Ptz:
             except (OSError, ValueError) as e:
                 log.info("ptz: couldn't turn back: %s", e)
         return frames
+
+    # -- yes and no, with its head ---------------------------------------------------------------------
+
+    def gesture(self, kind, times=2, tempo=None):
+        """A nod ("yes": down and up), a shake ("no": side to side) or a tilt
+        ("unsure": up a little, a pause, and back), from wherever it points,
+        ending where it started, at `tempo` nods a second. On an OBSBOT a nod
+        or a shake is one continuous to-and-fro at a speed — a sine, the way
+        a head moves — not a row of moves with a stop in each; another camera
+        is sent the turning points on the beat. It's a look of its own: the
+        stick and the little friend wait, and a camera following someone
+        stops for it and follows again after. Blocks until done; False when
+        it couldn't."""
+        kind = {"yes": "nod", "no": "shake", "unsure": "tilt", "hmm": "tilt"}.get(kind, kind)
+        if kind not in ("nod", "shake", "tilt"):
+            raise ValueError(f"not a gesture: {kind}")
+        axis = "pan" if kind == "shake" else "tilt"
+        try:
+            hz = max(0.5, min(3.0, float(tempo or TEMPO)))
+        except (TypeError, ValueError):
+            hz = TEMPO
+        with self._lock:
+            if not self.available() or axis not in self.ctrls:
+                return False
+            if self.looking or self.gesturing:
+                return False                                  # mid-look: the words will have to do
+            self.gesturing = kind
+        try:
+            self.wake(f"a {kind}")                            # asleep, it would ignore every move
+            with self.paused_follow():
+                if kind == "tilt":
+                    return self._tilt_head()
+                amp = NOD if kind == "nod" else SHAKE
+                if self._smooth_ok():
+                    with self._lock:
+                        self._vel = (0.0, 0.0)
+                        self._gen += 1
+                        gen = self._gen
+                    # it takes speeds only while it streams: a camera that was idle starts up first (a few
+                    # seconds on a Zero 2 W), and stays streaming a while after, so the next nod is at once
+                    if self._ready_to_speed(gen, wait=GESTURE_STREAM_WAIT):
+                        try:
+                            return self._wag_smooth(axis, -amp if kind == "nod" else amp, hz, times, gen)
+                        finally:
+                            self.eyes_open()
+                    if self._gen != gen:
+                        return False                          # another move came along while it got ready
+                    log.info("ptz: the camera isn't streaming, so the %s goes in moves rather than at a speed", kind)
+                return self._wag_steps(axis, -amp if kind == "nod" else amp, hz, times)
+        except (OSError, ValueError) as e:
+            log.info("ptz: couldn't %s: %s", kind, e)
+            return False
+        finally:
+            self.gesturing = None
+
+    @staticmethod
+    def eyes_open(seconds=EYES_OPEN):
+        """Keep the camera streaming a while: an OBSBOT takes a speed only
+        then, so with its eyes open the next nod comes the moment it's asked."""
+        from . import camera
+        camera.CAMERA.touch(seconds)
+
+    def _tilt_head(self):
+        """Up a little, a moment's pause, and back: "hmm"."""
+        start = self.position()
+        self.set(tilt=start["tilt"] + NOD * 0.7)
+        self._let_it_move(0.8)
+        self.set(pan=start["pan"], tilt=start["tilt"])
+        self._let_it_move(0.0)
+        return True
+
+    def _wag_steps(self, axis, amp, hz, times):
+        """A nod or a shake as moves: the turning points, each sent on the
+        beat — half a cycle apart — whether or not the camera has quite got
+        to the last one (turning back mid-move is the nod). Then back where
+        it was."""
+        start = self.position()
+        beat = 0.5 / hz
+        for i in range(2 * times):
+            if self.fd is None:
+                return False
+            self.set(**{axis: start[axis] + (amp if i % 2 == 0 else -amp)})
+            time.sleep(beat)
+        self.set(pan=start["pan"], tilt=start["tilt"])
+        self._let_it_move(0.0)
+        return True
+
+    def _wag_smooth(self, axis, amp, hz, times, gen):
+        """An OBSBOT nodding or shaking at a speed: one continuous to-and-fro —
+        a sine of `amp` degrees at `hz` a second, `times` over — from where it
+        points and back to it. Like _glide_smooth, but the place it's aimed
+        at moves. Nothing of it goes past the camera's range: near an end the
+        swing is smaller."""
+        with self._lock:
+            if self._gen != gen or self.fd is None:
+                return False
+            self._halt_speed()
+            start = {k: float(self.target.get(k, self.ctrls[k]["default"])) for k in ("pan", "tilt") if k in self.ctrls}
+            lo, hi = self._range(axis)
+            room = min(start[axis] - lo, hi - start[axis]) / ARCSEC
+            omega = 2 * math.pi * hz
+            amp = math.copysign(min(abs(amp), max(0.0, room), GESTURE_PEAK / omega), amp)   # the swing's top speed stays modest
+            duration = times / hz
+            t0 = time.time()
+            self._est = dict(start)
+            self._speeding, self._speed_gen = True, gen
+            self._spd, self._spd_at = (0.0, 0.0), t0
+            self.move_until = max(self.move_until, t0 + duration + 0.3)
+            self.turns.append((t0, t0 + duration + 0.3))
+        misses = 0
+        try:
+            while True:
+                with self._lock:
+                    if self._gen != gen or not self._speeding or self._speed_gen != gen:
+                        return False                           # another move stopped it, and takes over
+                    if self.fd is None:
+                        raise ValueError("the camera went away")
+                    now = time.time()
+                    if now - t0 >= duration:
+                        break
+                    self._integrate(now)
+                    # aim at where the sine should be by the next tick, so a late tick doesn't add up
+                    want = start[axis] + amp * math.sin(omega * min(duration, now + SPEED_TICK - t0)) * ARCSEC
+                    dps = (want - self._est[axis]) / ARCSEC / SPEED_TICK
+                    try:
+                        self._speed(dps if axis == "pan" else 0.0, dps if axis == "tilt" else 0.0)
+                        misses = 0
+                    except OSError as e:                           # busy a moment: the last speed carries on
+                        misses += 1
+                        if now - self._err_logged > 10:
+                            self._err_logged = now
+                            log.info("ptz: the camera didn't take a speed (%s) — carrying on", e.strerror or e)
+                        if misses >= 4:
+                            log.warning("ptz: the camera stopped taking speeds — stopping the %s", "nod" if axis == "tilt" else "shake")
+                            break
+                time.sleep(SPEED_TICK)
+        finally:
+            with self._lock:
+                if self._speeding and self._speed_gen == gen:
+                    self._halt_speed()
+        # back where it was, exactly (and again a moment later, as after a glide)
+        for again in (False, True):
+            with self._lock:
+                if self._gen != gen or self.fd is None or self.follow_on:
+                    break
+                values = {k: self._clamp(k, start[k]) for k in start}
+                try:
+                    self._write(dict(values))
+                except (OSError, ValueError) as e:
+                    log.info("ptz: couldn't settle after the %s: %s", "nod" if axis == "tilt" else "shake", e)
+                    break
+                for k in values:
+                    self._want[k] = float(self.target[k])
+            if not again:
+                time.sleep(0.3)
+        return True
+
+    def _let_it_move(self, pause):
+        """Wait for the move just sent (about how long the gimbal takes), and a beat more."""
+        time.sleep(max(0.0, self.move_until - time.time()) + pause)
 
     # -- following you (the camera's own tracking) -----------------------------------------------------
 
@@ -1301,7 +1470,7 @@ class Ptz:
         if self.asleep and using:
             self.wake_soon("it's in use")
             return
-        if self._paused or self.looking or not awake or self.follow_on is None or self.follow_mode == "switching":
+        if self._paused or self.looking or self.gesturing or not awake or self.follow_on is None or self.follow_mode == "switching":
             return
         if self.follow_on != self.follow_want:
             log.info("ptz: the camera %s by itself — turning it %s, as the Follow me switch says",
@@ -1371,6 +1540,7 @@ class Ptz:
         return {"available": ok, "device": self.device, "card": self.card, "error": self.error,
                 "position": self.position() if ok else None, "home": self.conf.get("home") or None,
                 "moving": ok and (self.driving() or time.time() < self.move_until), "looking": self.looking,
+                "gesture": self.gesturing,
                 "last_look": self.last_look, "speed": self.conf.get("speed", 60),
                 "follow": {"can": ok and self.xu_unit is not None, "on": self.follow_on,
                            "want": self.follow_want, "mode": self.follow_mode, "paused": self._paused > 0},

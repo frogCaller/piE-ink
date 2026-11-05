@@ -1,8 +1,10 @@
 """Weather for the panel.
 
 Numbers come from Open-Meteo (free, no key, worldwide): geocoding for the
-place name in config.yaml, then current conditions and a few days of
-forecast. For places in the US, the National Weather Service forecast page
+place name in config.yaml, then current conditions, the next day hour by hour
+and the week ahead — all of it in the one request, so another Pi of yours
+that shows the hours and the week can take it from here (GET /api/shared)
+rather than ask again. For places in the US, the National Weather Service forecast page
 is scraped with BeautifulSoup for its worded forecast ("Sunny, with a high
 near 75"), which no JSON feed offers. Everything is cached with backoff.
 """
@@ -17,6 +19,8 @@ log = logging.getLogger(__name__)
 UA = {"User-Agent": "pie-ink/3.0 (+https://github.com/frogCaller/piE-ink)"}
 GEOCODE = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST = "https://api.open-meteo.com/v1/forecast"
+FORECAST_DAYS = 7    # today and the six after
+HOURS = 24           # the hours kept, from this one on (a forecast is used for a while after it's fetched)
 NWS = "https://forecast.weather.gov/MapClick.php"
 TTL = 600            # ten minutes
 NWS_TTL = 1800
@@ -89,16 +93,31 @@ def geocode(name, limit=5):
     return out
 
 
+def _hours(c, hr):
+    """The hours from this one on: [{"time", "temp", "code", "rain", "is_day"}] (rain: the chance, %)."""
+    times = hr.get("time") or []
+    now_hour = str(c.get("time", ""))[:13]
+    start = next((i for i, t in enumerate(times) if str(t)[:13] >= now_hour), 0) if now_hour else 0
+
+    def col(name, i, default=None):
+        v = hr.get(name) or []
+        return v[i] if i < len(v) else default
+    return [{"time": times[i], "temp": col("temperature_2m", i), "code": col("weather_code", i),
+             "rain": col("precipitation_probability", i), "is_day": bool(col("is_day", i, 1))}
+            for i in range(start, min(start + HOURS, len(times)))]
+
+
 def fetch(lat, lon, units="F", cached_only=False):
-    """Current conditions and the next days, in the chosen units."""
+    """Current conditions, the hours ahead ("hours") and the week ("days"), in the chosen units."""
     key = f"weather_{lat:.3f}_{lon:.3f}_{units}"
 
     def go():
         params = {
             "latitude": lat, "longitude": lon, "timezone": "auto",
             "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day,precipitation",
+            "hourly": "temperature_2m,weather_code,precipitation_probability,is_day",
             "daily": "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max",
-            "forecast_days": 5,
+            "forecast_days": FORECAST_DAYS,
         }
         if units == "F":
             params.update(temperature_unit="fahrenheit", wind_speed_unit="mph", precipitation_unit="inch")
@@ -108,18 +127,21 @@ def fetch(lat, lon, units="F", cached_only=False):
         c, dl = d.get("current", {}), d.get("daily", {})
         days = []
         for i in range(len(dl.get("time", []))):
+            def col(name, default=None):
+                v = dl.get(name) or []
+                return v[i] if i < len(v) else default
             days.append({
-                "date": dl["time"][i], "code": dl["weather_code"][i],
-                "hi": dl["temperature_2m_max"][i], "lo": dl["temperature_2m_min"][i],
-                "rain": (dl.get("precipitation_probability_max") or [None] * 9)[i],
-                "sunrise": (dl.get("sunrise") or [""] * 9)[i][-5:], "sunset": (dl.get("sunset") or [""] * 9)[i][-5:],
+                "date": dl["time"][i], "code": col("weather_code"),
+                "hi": col("temperature_2m_max"), "lo": col("temperature_2m_min"),
+                "rain": col("precipitation_probability_max"),
+                "sunrise": str(col("sunrise", "") or "")[-5:], "sunset": str(col("sunset", "") or "")[-5:],
             })
         return {
             "temp": c.get("temperature_2m"), "feels": c.get("apparent_temperature"),
             "humidity": c.get("relative_humidity_2m"), "wind": c.get("wind_speed_10m"),
             "wind_dir": c.get("wind_direction_10m"),
             "code": c.get("weather_code"), "is_day": bool(c.get("is_day", 1)), "precip": c.get("precipitation"),
-            "units": units, "days": days, "tz": d.get("timezone"),
+            "units": units, "hours": _hours(c, d.get("hourly") or {}), "days": days, "tz": d.get("timezone"),
         }
     return cache.cached(key, TTL, go, cached_only)
 

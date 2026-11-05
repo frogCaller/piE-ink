@@ -127,7 +127,13 @@ class ST7789:
         for pin in (self.dc, self.rst, self.bl):
             lgpio.gpio_claim_output(self.chip, pin)
         self.spi = spidev.SpiDev()
-        self.spi.open(self.bus, self.cs)
+        try:
+            self.spi.open(self.bus, self.cs)
+        except OSError as e:                          # /dev/spidev0.1 missing (SPI off), or not ours to open
+            why = gpio.spi_problem(e, self.bus, self.cs)
+            if why:
+                raise RuntimeError(why) from e
+            raise
         self.spi.max_speed_hz = self.speed
         self.spi.mode = 0
         self._reset()

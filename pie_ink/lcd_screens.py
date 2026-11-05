@@ -40,11 +40,24 @@ _icons = {}
 CAMERA_INTERVAL = 0.1            # the camera screen redraws this often, whatever the fps setting
 
 
+SNAKE_INTERVAL = 1 / 12          # the game glides: a dozen frames a second
+
+
+MAIN_EVERY = 3.0                 # one of the e-ink's own screens, drawn for the LCD: they change by the minute, not the frame
+MAIN_MODE = None                 # () -> the e-ink's screen now (the app sets it): for "Same as the e-ink"
+
+
 def interval(conf):
     """Seconds between redraws of the chosen screen."""
     screen = conf.get("screen")
+    if screen == "mirror":
+        screen = _same_as(_main_now()) or screen
+    if screen in MAIN_SCREENS:
+        return max(MAIN_EVERY, 1.0 / max(0.2, float(conf.get("fps", 2) or 2)))
     if screen == "camera":
         return CAMERA_INTERVAL
+    if screen == "snake":
+        return SNAKE_INTERVAL
     if screen == "paint":
         from .paint import PAINT
         if PAINT.busy():                              # strokes are arriving: keep up with them
@@ -195,6 +208,10 @@ def system(conf, now=None, size=None):
 
     # every 12 seconds the memory and disk cells swap between percent and size
     alt = int(now // 12) % 2 == 1
+    if conf.get("pad"):
+        from .pad import SYS
+        if SYS["units"]:
+            alt = SYS["units"] == "size"
     mem_total = L.get("mem_total") or 0
     mem_text = f"{L.get('mem_pct', 0):.0f}%" if not alt else f"{mem_total / 1024 ** 3:.1f} GB"
     disk_total = L.get("disk_total") or 0
@@ -422,6 +439,13 @@ def weather(conf, now=None, size=None, config=None):
         _centered(d, "Waiting for the forecast…", f13, w / 2, h / 2, dim)
         return img
 
+    picked = 0
+    if conf.get("pad"):                                 # in the GPi Case: ◀ ▶ pick one of the next days
+        from .pad import weather_day
+        picked = weather_day() if 0 < weather_day() < len(data.get("days") or []) else 0
+    if picked:
+        return _weather_day(img, d, data, picked, (w, h), (bg, fg, accent, dim), light, place_name)
+
     # now: the big number, the icon, the condition — sized to the glass
     narrow, short = w < 200, h < 200
     name = wx.icon_name(data.get("code"), data.get("is_day", True))
@@ -474,127 +498,94 @@ def weather(conf, now=None, size=None, config=None):
     # the next days across the bottom (on a short screen: packed, hi and lo side by side)
     days = (data.get("days") or [])[1:5]
     if days:
-        strip_top = h - (56 if short else 74)
-        d.line((10, strip_top - 6, w - 10, strip_top - 6), fill=(200, 200, 200) if light else (60, 60, 60), width=1)
-        col = (w - 20) / len(days)
-        ic_px = 20 if short else 26
-        for i, day in enumerate(days):
-            cx = 10 + col * i + col / 2
-            try:
-                label = datetime.strptime(day.get("date", ""), "%Y-%m-%d").strftime("%a")
-            except ValueError:
-                label = "—"
-            _centered(d, label, f12, cx, strip_top, dim)
-            dn = wx.icon_name(day.get("code"), True)
-            ic = _wx_icon(dn, ic_px, _wx_tint(dn, light))
-            if ic is not None:
-                img.paste(ic, (int(cx - ic_px / 2), strip_top + 16), ic)
-            if short:
-                hi, lo = _deg(day.get("hi")), _deg(day.get("lo"))
-                tw = d.textlength(hi, font=f13) + 4 + d.textlength(lo, font=f11)
-                d.text((cx - tw / 2, strip_top + 38), hi, font=f13, fill=fg)
-                d.text((cx - tw / 2 + d.textlength(hi, font=f13) + 4, strip_top + 40), lo, font=f11, fill=dim)
-            else:
-                _centered(d, _deg(day.get("hi")), f13, cx, strip_top + 44, fg)
-                _centered(d, _deg(day.get("lo")), f11, cx, strip_top + 60, dim)
+        _strip(img, d, days, 0, w, h, short, (bg, fg, accent, dim), light)
     return img
 
 
-# -- the GPS ----------------------------------------------------------------------------------------
+def _strip(img, d, days, picked, w, h, short, colours, light):
+    """The next days across the bottom: day, icon, high and low; the one picked lit."""
+    from . import weather as wx
+    bg, fg, accent, dim = colours
+    f13, f12, f11 = font(1, 13), font(1, 12), font(1, 11)
+    strip_top = h - (56 if short else 74)
+    d.line((10, strip_top - 6, w - 10, strip_top - 6), fill=(200, 200, 200) if light else (60, 60, 60), width=1)
+    col = (w - 20) / len(days)
+    ic_px = 20 if short else 26
+    for i, day in enumerate(days, start=1):
+        cx = 10 + col * (i - 1) + col / 2
+        try:
+            label = datetime.strptime(day.get("date", ""), "%Y-%m-%d").strftime("%a")
+        except ValueError:
+            label = "—"
+        if i == picked:
+            d.rounded_rectangle([cx - col / 2 + 2, strip_top - 3, cx + col / 2 - 2, h - 3], radius=8,
+                                outline=accent, width=2)
+        _centered(d, label, f12, cx, strip_top, accent if i == picked else dim)
+        dn = wx.icon_name(day.get("code"), True)
+        ic = _wx_icon(dn, ic_px, _wx_tint(dn, light))
+        if ic is not None:
+            img.paste(ic, (int(cx - ic_px / 2), strip_top + 16), ic)
+        if short:
+            hi, lo = _deg(day.get("hi")), _deg(day.get("lo"))
+            tw = d.textlength(hi, font=f13) + 4 + d.textlength(lo, font=f11)
+            d.text((cx - tw / 2, strip_top + 38), hi, font=f13, fill=fg)
+            d.text((cx - tw / 2 + d.textlength(hi, font=f13) + 4, strip_top + 40), lo, font=f11, fill=dim)
+        else:
+            _centered(d, _deg(day.get("hi")), f13, cx, strip_top + 44, fg)
+            _centered(d, _deg(day.get("lo")), f11, cx, strip_top + 60, dim)
 
-def gps(conf, now=None, size=None, config=None):
-    from .gps import GPS, compass
-    from .modes.gps import fmt_coord, fmt_speed, fmt_alt
-    w, h = size or canvas_size(conf)
-    bg, fg, accent, dim = _colours(conf)
-    light = bool(conf.get("light_mode"))
-    img = Image.new("RGB", (w, h), bg)
-    d = ImageDraw.Draw(img)
-    narrow = w < 200
-    f11, f12, f13 = font(1, 11), font(1, 12), font(1, 13)
-    g = GPS.status()
-    units_f = ((config or {}).get("weather") or {}).get("units", "F") == "F"
-    good = (30, 150, 75) if light else (70, 220, 120)
-    warn = (210, 130, 0) if light else (255, 190, 60)
-    bad = (200, 0, 0) if light else (255, 90, 90)
 
-    d.text((10, 8), "GPS", font=f11, fill=dim)
-    if not g["enabled"]:
-        tag, colour = "OFF", dim
-    elif g["fix"] != "none":
-        tag, colour = f"{g['fix']} FIX", good
-    elif g["connected"]:
-        tag, colour = "SEARCHING", warn
-    else:
-        tag, colour = "NO RECEIVER", bad
-    _right(d, tag, f11, w - 10, 8, colour)
-    d.line((0, 24, w, 24), fill=dim, width=1)
-
-    if not g["enabled"]:
-        _centered(d, "The GPS is off.", f13, w / 2, h / 2 - 18, fg)
-        _centered(d, "Plug a USB GPS in: the Weather tab says how it is doing.", f12, w / 2, h / 2 + 4, dim)
-        return img
-    if not g["connected"] and g["fix"] == "none":
-        _centered(d, "No receiver found.", f13, w / 2, h / 2 - 18, fg)
-        _centered(d, "Plug the USB GPS in.", f12, w / 2, h / 2 + 4, dim)
-        return img
-
-    # the position
-    big = _bold(17 if narrow else 20)
-    y = 34
-    if g["fix"] != "none":
-        d.text((10, y), fmt_coord(g["lat"], True), font=big, fill=fg)
-        d.text((10, y + 26), fmt_coord(g["lon"], False), font=big, fill=fg)
-    else:
-        d.text((10, y), "Searching for", font=big, fill=fg)
-        d.text((10, y + 26), "satellites…", font=big, fill=dim)
-    y += 60
-    place = g.get("place")
-    if place and g["fix"] != "none":
-        d.text((10, y), place, font=f13, fill=accent)
-        y += 22
-
-    # the numbers, two per line
-    rows = []
-    if g["fix"] != "none":
-        rows.append(("Altitude", fmt_alt(g.get("alt_m"), units_f)))
-        rows.append(("Speed", fmt_speed(g.get("speed_kmh"), units_f)))
-        if g.get("course") is not None and (g.get("speed_kmh") or 0) >= 2:
-            rows.append(("Heading", f"{g['course']:.0f}° {compass(g['course'])}"))
-        rows.append(("Satellites", f"{g['sats_used']} of {g['sats_view']}"))
-        if g.get("hdop") is not None:
-            rows.append(("Accuracy", f"HDOP {g['hdop']:.1f}"))
-    else:
-        rows.append(("In view", str(g["sats_view"])))
-        rows.append(("Used", str(g["sats_used"])))
-    short = h < 200                                   # sideways on the 1.9": the numbers go in a right-hand column
-    if short:
-        x0, y0, col, step, bar_box = w // 2 + 10, 34, (w // 2 - 20) / 2, 32, (10, h - 50, w // 2 - 10, h - 26)
-    else:
-        x0, y0, col, step, bar_box = 10, y, (w - 20) / 2, 34, (10, h - 60, w - 10, h - 26)
-    for i, (label, value) in enumerate(rows):
-        x = x0 + (i % 2) * col
-        yy = y0 + (i // 2) * step
-        if yy + 28 > (h - 20 if short else bar_box[1] - 6):
-            break
-        d.text((x, yy), label.upper(), font=f11, fill=dim)
-        d.text((x, yy + 13), value, font=f13, fill=fg)
-
-    # the satellites, strongest first, along the bottom
-    snr = sorted((g.get("snr") or {}).values(), reverse=True)[:12]
-    if snr:
-        bx0, top, bx1, bottom = bar_box
-        bw = (bx1 - bx0) / 12
-        for i, sv in enumerate(snr):
-            bh = max(2, round((bottom - top) * min(sv, 50) / 50))
-            colour = good if sv >= 30 else warn if sv >= 20 else dim
-            d.rectangle((bx0 + i * bw + 1, bottom - bh, bx0 + (i + 1) * bw - 2, bottom), fill=colour)
-        d.line((bx0, bottom + 1, bx1, bottom + 1), fill=dim, width=1)
-    foot = f"UTC {g['utc']}" if g.get("utc") else ""
-    if foot:
-        d.text((10, h - 20), foot, font=f11, fill=dim)
-    if g.get("device") and g["source"] != "mock":
-        _right(d, str(g["device"]).replace("/dev/", ""), f11, w - 10, h - 20, dim)
+def _weather_day(img, d, data, picked, size, colours, light, place_name):
+    """One of the next days, big: its name, the icon, high and low, what it'll be like, the chance of
+    rain, sunrise and sunset — and the strip below, that day lit."""
+    from . import weather as wx
+    w, h = size
+    bg, fg, accent, dim = colours
+    days = data.get("days") or []
+    day = days[picked]
+    short = h < 200
+    try:
+        when = datetime.strptime(day.get("date", ""), "%Y-%m-%d")
+        title = when.strftime("%A") if picked > 1 else "Tomorrow"
+        sub = when.strftime("%-d %B")
+    except ValueError:
+        title, sub = "—", ""
+    d.rectangle([0, 0, w, 24], fill=bg)
+    d.text((10, 8), (f"{place_name.upper()} · " if place_name else "") + sub.upper(), font=font(1, 11), fill=dim)
+    top = 22 if short else 28
+    icon_px = 60 if short else 78
+    name = wx.icon_name(day.get("code"), True)
+    icon = _wx_icon(name, icon_px, _wx_tint(name, light))
+    if icon is not None:
+        img.paste(icon, (w - 10 - icon_px, top - 4), icon)
+    d.text((10, top), title, font=_bold(22 if short else 26), fill=accent)
+    hi, lo = _deg(day.get("hi")), _deg(day.get("lo"))
+    big = _bold(32 if short else 40)
+    d.text((10, top + (28 if short else 34)), hi, font=big, fill=fg)
+    d.text((16 + d.textlength(hi, font=big), top + (40 if short else 50)), lo, font=font(1, 16), fill=dim)
+    cond, _cat = wx.describe(day.get("code"))
+    y = top + (70 if short else 88)
+    bits = [cond]
+    if day.get("rain") is not None:
+        bits.append(f"rain {round(float(day['rain']))}%")
+    f14 = font(1, 14)
+    d.text((10, y), " · ".join(bits), font=f14, fill=fg)
+    strip_top = h - (56 if short else 74) - 6
+    row = [(k, day.get(k)) for k in ("sunrise", "sunset") if day.get(k)]
+    x = 10 + d.textlength(" · ".join(bits), font=f14) + 16           # sunrise and sunset beside it, if they fit
+    there = sum(20 + d.textlength(t, font=font(1, 12)) + 14 for _, t in row)
+    if row and x + there > w - 10:
+        x, y = 10, y + 20                                             # …or under it, when there's room
+    if row and (y + 18 < strip_top or len(days) < 2):
+        for ic_name, text in row:
+            ic = _wx_icon(ic_name, 16, _wx_tint(ic_name, light))
+            if ic is not None:
+                img.paste(ic, (int(x), int(y)), ic)
+                x += 20
+            d.text((x, y + 1), text, font=font(1, 12), fill=fg)
+            x += d.textlength(text, font=font(1, 12)) + 14
+    if len(days) > 1:
+        _strip(img, d, days[1:5], picked, w, h, short, colours, light)
     return img
 
 
@@ -748,80 +739,20 @@ def paint(conf, now=None, size=None):
     return img
 
 
-# -- the map, in colour --------------------------------------------------------------------------
-
-def map_screen(conf, now=None, size=None, config=None):
-    """Where the Pi is, on OpenStreetMap, in colour: a pin in the middle, the
-    other PiE-inks as lettered dots, a scale bar, the place across the top."""
-    from . import maps, friends, journey
-    w, h = size or canvas_size(conf)
-    bg, fg, accent, dim = _colours(conf)
-    img = Image.new("RGB", (w, h), bg)
-    d = ImageDraw.Draw(img)
-    f12, f10 = font(1, 12), font(1, 10)
-    pos = maps.where(config or {})
-    m = (config or {}).get("map", {})
-    zoom = max(8, min(18, int(m.get("zoom", 15) or 15)))
-    hdr = 18
-    view = (w, h - hdr - 16)
-    if not pos:
-        _centered(d, "No position yet.", f12, w / 2, h / 2 - 14, fg)
-        _centered(d, "GPS, or a town under Weather.", f10, w / 2, h / 2 + 4, dim)
-        return img
-    tiles, missing = maps.compose(pos["lat"], pos["lon"], zoom, view, cached_only=True)
-    wanted = len(maps.tiles_for(pos["lat"], pos["lon"], zoom, view))
-    if missing:
-        maps.fetch_async(pos["lat"], pos["lon"], zoom, view)
-    if missing == wanted:
-        _centered(d, "Fetching the map…", f12, w / 2, h / 2, dim)
-    else:
-        img.paste(tiles, (0, hdr))
-        if m.get("journey", True):
-            pts = journey.JOURNEY.points()
-            if len(pts) >= 2:
-                maps.draw_trail(d, pts, (pos["lat"], pos["lon"]), zoom, view, hdr, accent, (255, 255, 255), width=3)
-        if m.get("friends", True):
-            for host, lat, lon in maps.friends_positions(friends.peers()):
-                x, y = maps.pixel_of(lat, lon, (pos["lat"], pos["lon"]), zoom, view)
-                if 0 <= x < view[0] and 0 <= y < view[1]:
-                    maps.draw_friend(d, x, hdr + y, host[:1].upper(), f10, (40, 40, 40), (255, 255, 255), r=7)
-        maps.draw_pin(d, view[0] // 2, hdr + view[1] // 2, accent, (255, 255, 255), r=6)
-        px, label = maps.scale_bar(pos["lat"], zoom, max_px=70)
-        sy = hdr + view[1] - 6
-        d.rectangle((2, sy - 13, 8 + max(px, int(d.textlength(label, font=f10))), hdr + view[1] - 1), fill=(255, 255, 255))
-        d.line([(4, sy), (4 + px, sy)], fill=(30, 30, 30), width=1)
-        d.line([(4, sy - 3), (4, sy)], fill=(30, 30, 30), width=1)
-        d.line([(4 + px, sy - 3), (4 + px, sy)], fill=(30, 30, 30), width=1)
-        d.text((5, sy - 13), label, font=f10, fill=(30, 30, 30))
-    # header and footer
-    d.rectangle((0, 0, w, hdr - 1), fill=bg)
-    title = pos.get("place") or "Map"
-    while len(title) > 1 and d.textlength(title, font=f12) > w - 8:
-        title = title[:-1]
-    d.text((4, 1), title, font=f12, fill=fg)
-    d.rectangle((0, h - 16, w, h), fill=bg)
-    coords = f"{abs(pos['lat']):.4f}° {'N' if pos['lat'] >= 0 else 'S'} {abs(pos['lon']):.4f}° {'E' if pos['lon'] >= 0 else 'W'}"
-    d.text((4, h - 14), coords, font=f10, fill=accent if pos["source"] == "gps" else dim)
-    src = maps.source_words(pos)
-    if d.textlength(coords, font=f10) + d.textlength(src, font=f10) + 14 < w:   # the narrow 1.9" has no room for it
-        _right(d, src, f10, w - 4, h - 14, dim)
-    return img
-
-
 # -- a coin, in the original layout ------------------------------------------------------------
 
-def _price_text(p):
+def _price_text(p, money="$"):
     try:
         p = float(p)
     except (TypeError, ValueError):
         return "—"
     if p >= 1000:
-        return f"${p:,.0f}"
+        return f"{money}{p:,.0f}"
     if p >= 1:
-        return f"${p:,.2f}"
+        return f"{money}{p:,.2f}"
     if p >= 0.01:
-        return f"${p:,.4f}"
-    return f"${p:.8f}"
+        return f"{money}{p:,.4f}"
+    return f"{money}{p:.8f}"
 
 
 def _big_number(n):
@@ -836,19 +767,26 @@ def _big_number(n):
 
 
 class _CryptoFeed:
-    """Keeps the watchlist's quotes fresh while the crypto screen is up, on a
-    thread of its own, so the LCD loop never waits on the network. It idles
-    out a couple of minutes after the screen stops asking."""
+    """Keeps the watchlist's quotes (coins and shares alike) fresh while the
+    finance screen is up, on a thread of its own, so the LCD loop never waits
+    on the network. It idles out a couple of minutes after the screen stops
+    asking."""
 
     def __init__(self):
         self.quotes = {}
         self.days = 1
+        self.first = None                    # the one on the screen now: fetched before the rest
+        self.kick = threading.Event()        # a new range or coin picked: fetch now, not at the next round
         self.thread = None
         self.wanted = 0.0
 
-    def want(self, days):
+    def want(self, days, item=None):
         self.wanted = time.time()
+        if days != self.days or (item and item.get("id") != (self.first or {}).get("id")):
+            self.kick.set()
         self.days = days
+        if item:
+            self.first = item
         if not (self.thread and self.thread.is_alive()):
             self.thread = threading.Thread(target=self._run, daemon=True, name="lcd-crypto")
             self.thread.start()
@@ -865,19 +803,25 @@ class _CryptoFeed:
     def _run(self):
         from . import watchlist
         while time.time() - self.wanted < 120:
+            self.kick.clear()
             try:
                 days = self.days
-                for item in watchlist.visible():        # quote() only fetches when its cache is stale
+                items = watchlist.visible()
+                first = self.first
+                if first and any(i["id"] == first["id"] for i in items):
+                    items = [first] + [i for i in items if i["id"] != first["id"]]
+                for item in items:                      # quote() only fetches when its cache is stale
                     q = watchlist.quote(item, days)
                     if q:
                         self.quotes[(item["id"], days)] = q
+                    if self.kick.is_set():
+                        break                           # (picked another meanwhile: that one first)
                     time.sleep(0.5)
             except Exception:
                 log.exception("lcd crypto fetch failed")
             for _ in range(30):
-                if time.time() - self.wanted >= 120:
+                if time.time() - self.wanted >= 120 or self.kick.wait(1):
                     break
-                time.sleep(1)
 
 
 _CRYPTO = _CryptoFeed()
@@ -895,10 +839,15 @@ def crypto(conf, now=None, size=None, config=None):
     items = watchlist.visible() + [{"id": f"{m.kind}-mining", "symbol": m.symbol, "name": m.title, "mining": m.kind}
                                    for m in mining.enabled()]
     per = max(10, int(((config or {}).get("crypto") or {}).get("coin_seconds", 90) or 90))
-    item = items[int(now // per) % len(items)]          # the same coin the e-ink shows, at the same time
+    ranges = bool(conf.get("pad"))                      # in the GPi Case: its buttons pick the coin and the range
+    if ranges:
+        from .pad import finance_index
+        item = items[finance_index(len(items), now, per)]
+    else:
+        item = items[int(now // per) % len(items)]      # the same coin the e-ink shows, at the same time
     if item.get("mining"):
         return _crypto_mining(conf, (w, h), (bg, fg, accent, dim, up, down), mining.MINERS[item["mining"]])
-    _CRYPTO.want(days)
+    _CRYPTO.want(days, item)
     q = _CRYPTO.quote(item, days)
 
     img = Image.new("RGB", (w, h), bg)
@@ -906,7 +855,14 @@ def crypto(conf, now=None, size=None, config=None):
     narrow = w < 200                                  # the 1.9" upright: everything a size down
     f_big, f_small, f_tiny = (_bold(17), font(1, 11), font(1, 9)) if narrow else (_bold(20), font(1, 13), font(1, 11))
     pad, top, header = 12, 10, 60
-    d.text((pad, top), (q["name"] if q else item.get("name", item["symbol"])).upper(), font=f_small, fill=dim)
+    stock = bool(q and q.get("kind") == "stock")
+    money = (q.get("money") or "$") if q else "$"
+    title = (q["name"] if q else item.get("name", item["symbol"])).upper()
+    if stock and q.get("exchange"):
+        title = f"{item['symbol']} · {q['exchange']}" if len(title) > (14 if narrow else 20) else f"{title} · {q['exchange']}"
+    d.text((pad, top), title[:28], font=f_small, fill=dim)
+    if ranges:
+        _range_row(d, days, w, h - 62, f_tiny, accent, bg, dim, light)
     if not q or q.get("price") is None:
         _centered(d, "Waiting for prices…", f_small, w / 2, h / 2, dim)
         return img
@@ -925,7 +881,7 @@ def crypto(conf, now=None, size=None, config=None):
         change = last - start                          # over the chart's window, like the chart
         pct = change / start * 100 if start else 0
         colour = up if change >= 0 else down
-        chart_h = h - header - 50
+        chart_h = h - header - (68 if ranges else 50)
         usable = chart_h - 20
         pts = [(pad + int(i * ((w - pad * 2) / len(vals))), header + 10 + int((1 - (v - lo) / span) * usable))
                for i, v in enumerate(vals)]
@@ -937,26 +893,41 @@ def crypto(conf, now=None, size=None, config=None):
             change = price * pct / (100 + pct)
 
     # header: price and the change over the window
-    d.text((pad, top + 18), _price_text(price), font=f_big, fill=fg)
+    d.text((pad, top + 18), _price_text(price, money), font=f_big, fill=fg)
     if change is not None and pct is not None:
         colour = up if change >= 0 else down
         dec = 0 if price >= 1000 else (2 if price >= 1 else 4)
         d.text((pad, top + 40), f"{change:+,.{dec}f} ({pct:+.2f}%)", font=f_small, fill=colour)
     if hi and lo:
-        _right(d, f"H: {_price_text(hi)}", f_tiny, w - 10, top, dim)
-        _right(d, f"L: {_price_text(lo)}", f_tiny, w - 10, top + 15, dim)
+        _right(d, f"H: {_price_text(hi, money)}", f_tiny, w - 10, top, dim)
+        _right(d, f"L: {_price_text(lo, money)}", f_tiny, w - 10, top + 15, dim)
 
-    # bottom left: the figures
+    # bottom left: the figures (a share: its previous close, volume and 52-week high)
     y = h - 45
-    d.text((pad, y), f"MC: ${_big_number(q.get('market_cap'))}", font=f_tiny, fill=dim)
-    d.text((pad, y + 12), f"SUPPLY: {_big_number(q.get('circulating_supply'))}", font=f_tiny, fill=dim)
-    d.text((pad, y + 24), f"ATH: {_price_text(q.get('ath'))}", font=f_tiny, fill=dim)
+    if stock:
+        d.text((pad, y), f"PREV: {_price_text(q.get('prev_close'), money)}", font=f_tiny, fill=dim)
+        d.text((pad, y + 12), f"VOL: {_big_number(q.get('volume'))}", font=f_tiny, fill=dim)
+        d.text((pad, y + 24), f"52W H: {_price_text(q.get('ath'), money)}", font=f_tiny, fill=dim)
+    else:
+        d.text((pad, y), f"MC: ${_big_number(q.get('market_cap'))}", font=f_tiny, fill=dim)
+        d.text((pad, y + 12), f"SUPPLY: {_big_number(q.get('circulating_supply'))}", font=f_tiny, fill=dim)
+        d.text((pad, y + 24), f"ATH: {_price_text(q.get('ath'))}", font=f_tiny, fill=dim)
 
     # bottom right: the mood — CoinGecko's community vote, the same number the e-ink shows
     # (counting the chart's up-ticks against its down-ticks, as this did, comes out near 50/50
-    # for any coin, and 50/50 exactly when the chart hasn't arrived yet)
+    # for any coin, and 50/50 exactly when the chart hasn't arrived yet); a share has no vote,
+    # so today's move against the previous close stands there, with whether the market is open
     vote = q.get("sentiment_up")
-    if vote is not None:
+    if stock:
+        today = (q.get("change") or {}).get("24h")
+        if today is not None:
+            colour = up if today >= 0 else down
+            _right(d, "TODAY" + ("" if q.get("open") in (None, True) else " · CLOSED"), f_tiny, w - 10, h - 34, dim)
+            _right(d, f"{today:+.2f}%", f_small, w - 10, h - 22, colour)
+        else:
+            _right(d, "TODAY", f_tiny, w - 10, h - 34, dim)
+            _right(d, "no trades yet", f_small, w - 10, h - 22, dim)
+    elif vote is not None:
         up_pct = int(round(float(vote)))
         down_pct = 100 - up_pct
         if up_pct > 55:
@@ -971,6 +942,22 @@ def crypto(conf, now=None, size=None, config=None):
         _right(d, "SENTIMENT", f_tiny, w - 10, h - 34, dim)
         _right(d, "no vote yet", f_small, w - 10, h - 22, dim)
     return img
+
+
+def _range_row(d, days, w, y, fnt, accent, bg, dim, light):
+    """1D 1W 1M 6M 1Y across the screen, the chart's own lit."""
+    from .pad import RANGES
+    gap, padx = 6, 7
+    widths = [d.textlength(label, font=fnt) + padx * 2 for _, label in RANGES]
+    x = (w - sum(widths) - gap * (len(RANGES) - 1)) / 2
+    for (n, label), cw in zip(RANGES, widths):
+        on = n == days
+        if on:
+            d.rounded_rectangle([x, y, x + cw, y + 14], radius=7, fill=accent)
+        else:
+            d.rounded_rectangle([x, y, x + cw, y + 14], radius=7, outline=(205, 205, 205) if light else (70, 70, 70), width=1)
+        d.text((x + padx, y + 1), label, font=fnt, fill=bg if on else dim)
+        x += cw + gap
 
 
 def _crypto_mining(conf, size, colours, miner):
@@ -1056,10 +1043,45 @@ def _crypto_mining(conf, size, colours, miner):
     return img
 
 
-def mirror(conf, now=None, eink=None, size=None):
-    """The e-ink's frame, letterboxed onto the LCD (turn the LCD sideways —
-    rotation 90 or 270 — and the e-ink's landscape frame fills it)."""
+def _main_now():
+    try:
+        return MAIN_MODE() if MAIN_MODE else None
+    except Exception:
+        return None
+
+
+# the e-ink's screens that have an LCD screen of their own: "Same as the e-ink" shows that one
+_OWN = {"clock": "clock", "system": "system", "weather": "weather", "crypto": "crypto", "camera": "camera",
+        "buddy": "buddy", "groupchat": "chat"}
+
+
+def _same_as(name):
+    """The LCD screen that shows what the e-ink's `name` shows (None: draw the e-ink's own, for this size)."""
+    if name == "image":
+        from .paint import PAINT
+        return "paint" if PAINT.image() is not None else "drawing"
+    if name in _OWN:
+        return _OWN[name]
+    if name in MAIN_SCREENS:
+        return name
+    return None
+
+
+def mirror(conf, now=None, eink=None, size=None, config=None):
+    """Whatever the e-ink is showing, drawn again for the LCD — laid out for its size, so it
+    fills it (the LCD's own version where it has one). Without that to go on, the e-ink's
+    frame itself, fitted in."""
     w, h = size or canvas_size(conf)
+    main = _main_now()
+    if main == "off":
+        return Image.new("RGB", (w, h), _colours(conf)[0])
+    same = _same_as(main) if main else None
+    if same and config is not None:
+        fn = SCREENS[same]
+        try:
+            return fn(conf, size=(w, h), config=config) if fn in WITH_CONFIG else fn(conf, size=(w, h))
+        except Exception:
+            pass
     bg, fg, accent, dim = _colours(conf)
     img = Image.new("RGB", (w, h), bg)
     frame = eink() if eink else None
@@ -1077,15 +1099,40 @@ def mirror(conf, now=None, eink=None, size=None):
     return img
 
 
-SCREENS = {"system": system, "clock": clock, "weather": weather, "crypto": crypto, "gps": gps, "camera": camera,
-           "paint": paint, "drawing": drawing, "map": map_screen, "bot": bot, "chat": chat, "mirror": mirror,
-           "testcard": testcard, "buddy": buddy}
-LABELS = [("system", "System info"), ("clock", "Clock"), ("weather", "Weather"), ("crypto", "Crypto"),
-          ("gps", "GPS"), ("map", "Map (where it is)"), ("camera", "Camera"), ("paint", "Paint (draw on it)"),
-          ("drawing", "E-ink drawing"),
-          ("bot", "The bot"), ("buddy", "The little friend's face"), ("chat", "Group chat"), ("mirror", "Mirror the e-ink"),
-          ("testcard", "Test card (check the glass)")]
-WITH_CONFIG = {crypto, weather, gps, camera, drawing, map_screen}  # screens that read other sections' settings
+def snake_screen(conf, now=None, size=None, config=None):
+    """Snake, played by a decision model on the bot's Ollama: the whole screen is the arena.
+    The game runs on its own thread while this screen is up (see pie_ink/snake.py)."""
+    from . import llm, snake
+    size = size or canvas_size(conf)
+    config = config or {}
+    host = llm.base(config.get("llm", {})) or llm.normalise(config.get("llm", {}).get("backup_host") or llm.PI)
+    snake.GAME.ensure(config.get("snake", {}), host, size)
+    return snake.GAME.frame(size)
+
+
+def _main_screen(name):
+    """One of the e-ink's own screens, drawn for the LCD's size and colours (pie_ink/anysize.py)."""
+    def screen(conf, now=None, size=None, config=None):
+        from . import anysize
+        size = size or canvas_size(conf)
+        img = anysize.render(name, size, config or {}, light=bool(conf.get("light_mode")))
+        return img if img is not None else Image.new("RGB", size, _colours(conf)[0])
+    screen.__name__ = f"main_{name}"
+    return screen
+
+
+MAIN_SCREENS = {"me": "Me — your day", "message": "Message", "earnings": "Earnings", "music": "Music",
+                "reader": "The book you're reading", "postcard": "The last postcard"}
+SCREENS = {"system": system, "clock": clock, "weather": weather, "crypto": crypto, "camera": camera,
+           "paint": paint, "drawing": drawing, "bot": bot, "chat": chat, "mirror": mirror,
+           "testcard": testcard, "buddy": buddy, "snake": snake_screen}
+SCREENS.update({name: _main_screen(name) for name in MAIN_SCREENS})
+LABELS = [("mirror", "Same as the e-ink"), ("system", "System info"), ("clock", "Clock"), ("weather", "Weather"),
+          ("crypto", "Finance"), ("camera", "Camera")] + list(MAIN_SCREENS.items()) + [
+          ("paint", "Paint (draw on it)"), ("drawing", "E-ink drawing"),
+          ("bot", "The bot"), ("buddy", "The little friend's face"), ("chat", "Group chat"),
+          ("snake", "Snake (the bot plays)"), ("testcard", "Test card (check the glass)")]
+WITH_CONFIG = {crypto, weather, camera, drawing, snake_screen} | {SCREENS[n] for n in MAIN_SCREENS}  # screens that read other sections' settings
 
 
 def render(conf, eink=None, config=None, size=None):
@@ -1096,7 +1143,7 @@ def render(conf, eink=None, config=None, size=None):
     fn = SCREENS.get(name, system)
     size = size or canvas_size(conf)
     if fn is mirror:
-        return mirror(conf, eink=eink, size=size)
+        return mirror(conf, eink=eink, size=size, config=config)
     if fn in WITH_CONFIG:
         return fn(conf, size=size, config=config)
     return fn(conf, size=size)

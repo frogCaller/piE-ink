@@ -25,20 +25,31 @@ LOOKING = ("see", "look", "looking", "camera", "in front of you", "around you", 
 TOPICS = {
     "camera": "Say something about what you can see.",
     "weather": "Say something about the weather.",
-    "coins": "Say something about how the coins are doing.",
+    "coins": "Say something about how the coins and shares are doing.",
     "time": "Say something about the time of day.",
     "day": "Say something about how {owner}'s day is going.",
     "music": "Say something about the music playing.",
     "anything": "Say one thing about right now.",
     "rhythm": "Say something about when {owner} tends to be around, from what you have noticed.",
     "mining": "Say something about how {owner}'s mining is doing right now — the change is the point.",
-    "holdings": "Say something about how {owner}'s crypto holdings are doing — what they are worth and how that moved.",
-    "holdings_rich": "{owner}'s crypto just passed the line they set for it — they are rich now. Celebrate with them, big.",
-    "holdings_under": "{owner}'s crypto slipped back under the line they set for it. Say something about it, gently.",
-    "holdings_crash": "The market fell hard today and {owner}'s crypto lost a lot. Say something about it — "
+    "holdings": "Say something about how {owner}'s holdings (coins, shares) are doing — what they are worth and how that moved.",
+    "holdings_rich": "{owner}'s holdings just passed the line they set for them — they are rich now. Celebrate with them, big.",
+    "holdings_under": "{owner}'s holdings slipped back under the line they set for them. Say something about it, gently.",
+    "holdings_crash": "The market fell hard today and {owner}'s holdings lost a lot. Say something about it — "
                       "commiserate, or talk them down from the ledge.",
-    "holdings_rally": "The market jumped today and {owner}'s crypto is up a lot. Say something about it.",
-    "holdings_slump": "{owner}'s crypto has sunk well below the most it was ever worth. Say something about it.",
+    "holdings_rally": "The market jumped today and {owner}'s holdings are up a lot. Say something about it.",
+    "holdings_slump": "{owner}'s holdings have sunk well below the most they were ever worth. Say something about it.",
+    "pitato": "A Pietato — {owner}'s pocket media center, a friend of yours — just showed up on the network. "
+              "You're thrilled to have it around: greet it by name, big, in a sentence or two.",
+    "pitato_back": "{owner}'s Pietato — the pocket media center, your friend — is back on the network after a while away. "
+                   "You're delighted: welcome it back by name, in a sentence or two.",
+    "room": "{owner} just switched on another PiE-ink of theirs, in {room}: the house got bigger, and you are there "
+            "too now — the same one creature, on one more screen. Say so, pleased, in a sentence or two. Don't greet "
+            "it: it's you.",
+    "usb": "{owner} just plugged {what} into one of your USB ports. React to it in a sentence — curious, "
+           "delighted, maybe what you'd like to do with it.",
+    "room_back": "Your room in {room} — another PiE-ink of {owner}'s, where you also live — is back on the network "
+                 "after a while away. Say something glad about the house being whole again, in a sentence.",
 }
 
 ASKS = {
@@ -88,21 +99,6 @@ def context(config, day=None):
             lines.append(f"{_owner(config)} has the day off")
         else:
             lines.append(f"{_owner(config)} is free right now")
-    try:
-        from .gps import GPS, compass
-        g = GPS.status()
-        if g["enabled"] and g["fix"] != "none":
-            mph = config.get("weather", {}).get("units", "F") == "F"
-            speed = g.get("speed_kmh") or 0
-            speed_text = (f", moving {speed * 0.621:.0f} mph" if mph else f", moving {speed:.0f} km/h") + \
-                         (f" heading {compass(g.get('course'))}" if g.get("course") is not None else "") if speed >= 2 else ", not moving"
-            where = f" — {g['place']}" if g.get("place") else ""
-            lines.append(f"Location (from the GPS): {g['lat']:.4f}, {g['lon']:.4f}{where}{speed_text}"
-                         + (f", altitude {g['alt_m']:.0f} m" if g.get("alt_m") is not None else ""))
-        elif g["enabled"]:
-            lines.append("The GPS receiver has no fix yet" if g["connected"] else "The GPS receiver is not plugged in")
-    except Exception:
-        log.debug("no gps for the prompt", exc_info=True)
     w = config.get("weather", {})
     if w.get("lat") is not None:
         try:
@@ -130,14 +126,17 @@ def context(config, day=None):
             log.debug("no weather for the prompt", exc_info=True)
 
     try:
-        from . import coingecko, watchlist
+        from . import stocks, watchlist
         items = watchlist.visible()
-        if items:
-            q = coingecko.coin_data(items[0]["id"], cached_only=True)
+        for item in items[:3]:                                   # the first few on the Finance screen, coins and shares
+            q = watchlist.data(item, cached_only=True)
             if q and q.get("price") is not None:
                 change = q.get("change", {}).get("24h")
-                lines.append(f"{items[0]['symbol'].upper()}: ${q['price']:,.0f}"
-                             + (f", {change:+.1f}% in a day" if change is not None else ""))
+                what = "share" if watchlist.kind(item) == "stock" else "coin"
+                sign = stocks.money_sign(q.get("currency")) if what == "share" else "$"
+                price = f"{sign}{q['price']:,.0f}" if q["price"] >= 100 else f"{sign}{q['price']:,.2f}"
+                lines.append(f"{item['symbol'].upper()} ({what}): {price}"
+                             + (f", {change:+.1f}% {'today' if what == 'share' else 'in a day'}" if change is not None else ""))
     except Exception:
         pass
     try:
@@ -169,17 +168,61 @@ def context(config, day=None):
     except Exception:
         pass
     try:
+        from . import doing
+        line = doing.facts(config)          # Snake, the screens, the miners, the room: what it is up to
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
+    try:
+        from . import pitato
+        line = pitato.PITATO.words(_owner(config))   # the handheld Pi, when it's about, and what's on its screen
+        if line:
+            lines.append(line)
+        from . import pitato_screen
+        line = pitato_screen.words(_owner(config))   # ...and what you can put on that screen
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
+    try:
+        from . import gestures
+        line = gestures.GESTURES.words()        # hand gestures for the TV and the lights, when they're on
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
+    try:
+        from . import household
+        line = household.HOUSE.words(_owner(config), config)   # your other PiE-inks: the rooms of the one bot's house
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
+    try:
+        from . import shelf
+        line = shelf.words(config, _owner(config))   # the photos, books, music here, and the Pietato's shelves
+        if line:
+            lines.append(line)
+    except Exception:
+        pass
+    try:
+        from . import notebook, reminders
+        line = notebook.words(_owner(config))        # what they asked you to remember
+        if line:
+            lines.append(line)
+        line = reminders.REMINDERS.words(_owner(config))   # what you'll remind them of
+        if line:
+            lines.append(line)
+        lines.append("You keep a notebook ('remember that …', 'forget …') and set reminders and timers ('remind me in 20 "
+                     "minutes to …', 'set a timer for 5 minutes'); those are done the moment they ask, in plain words.")
+    except Exception:
+        pass
+    try:
         from . import sight
         seen = sight.summary(hours=24, limit=10)
         if seen:
             lines.append(f"The camera has seen today: {seen}")
-    except Exception:
-        pass
-    try:
-        from . import journey
-        trip = journey.summary(units=config.get("weather", {}).get("units", "F"))
-        if trip:
-            lines.append(f"Where it has been: {trip}")
     except Exception:
         pass
     try:
@@ -232,7 +275,7 @@ def _look(config):
         return None, str(e)[:120]
 
 
-def ask(config, kind="idle", message=None, day=None, topic=None, history=None):
+def ask(config, kind="idle", message=None, day=None, topic=None, history=None, room=None, what=None):
     """Kick off a line from the model. Returns False if it's busy or off."""
     conf = config.get("llm", {})
     if not conf.get("enabled") or not conf.get("model"):
@@ -246,7 +289,8 @@ def ask(config, kind="idle", message=None, day=None, topic=None, history=None):
         lines.append(f"{owner} says to you: {message}")
         ask_line = "Reply to them."
     elif topic:
-        ask_line = TOPICS.get(topic, TOPICS["anything"]).format(owner=owner)
+        ask_line = TOPICS.get(topic, TOPICS["anything"]).format(owner=owner, room=room or "another room",
+                                                                what=what or "something")
     else:
         ask_line = ASKS.get(kind, ASKS["idle"]).format(owner=owner)
     images, _why = _look(config) if topic == "camera" else (None, "")
@@ -354,9 +398,10 @@ def survey(config, image_b64, labels, question=None, timeout=None):
     return llm.generate(conf, system, prompt, timeout=timeout, images=[image_b64], limit=llm.room(420))
 
 
-def reply(config, message, day=None, timeout=None, history=None):
+def reply(config, message, day=None, timeout=None, history=None, image=None):
     """A blocking reply, for the chat bar. `history` is what was said before,
-    so a follow-up like "and tomorrow?" still makes sense."""
+    so a follow-up like "and tomorrow?" still makes sense. `image`: a picture
+    (base64) sent with the words — from the page, or a Pietato whose Bot is this one."""
     conf = config.get("llm", {})
     owner = _owner(config)
     lines = context(config, day)
@@ -365,8 +410,24 @@ def reply(config, message, day=None, timeout=None, history=None):
         lines.append("The conversation so far:")
         lines.extend("  " + x for x in said)
     lines.append(f"{owner} now says: {message}")
-    images, why = (_look(config) if wants_eyes(message) else (None, ""))
-    if images:
+    head = None
+    try:
+        from . import pet
+        head = pet.answer(config, message, lines, persona=system_prompt(config))   # a yes/no: the head answers first
+        if head:
+            lines.append(head[1])
+            if not llm.targets(conf):                 # no bot to put it in words: the head has answered, plainly
+                text = pet.WORDS[head[0]]
+                llm.set_speech(text, "chat")
+                return text
+    except Exception:
+        log.debug("pet: no head answer", exc_info=True)
+    if image:
+        images, why = image, ""
+        lines.append(f"{owner} sent you the attached picture with those words.")
+    else:
+        images, why = (_look(config) if wants_eyes(message) else (None, ""))
+    if images and not image:
         lines.append("The attached picture is what your camera can see right now.")
     elif why:
         lines.append(f"You cannot see anything right now ({why}); say so if they asked.")

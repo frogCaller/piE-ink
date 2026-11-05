@@ -1,11 +1,11 @@
 """The PiE-inks as a mesh: what each one has, and asking one for something.
 
-Every Pi's beacon (friends.py) now carries what it has — a camera, a GPS,
-which screen, a speaker, a microphone, a bot, Home Assistant, the agent — and
+Every Pi's beacon (friends.py) now carries what it has — a camera, which
+screen, a speaker, a microphone, a bot, Home Assistant, the agent — and
 where it is, in your words ("workshop", "upstairs", set under Settings → You).
 So you can say, type or Telegram:
 
-    which pi has a camera            find the pi with a gps
+    which pi has a camera            find the pi with a speaker
     show me the camera from upstairs show the workshop camera
     send this drawing to the workshop pi
     say hello on the upstairs pi     show the clock on the workshop pi
@@ -23,15 +23,14 @@ import requests
 log = logging.getLogger(__name__)
 
 CAP_WORDS = {"camera": "camera", "cam": "camera", "webcam": "camera", "eyes": "camera",
-             "gps": "gps", "location": "gps", "receiver": "gps",
              "screen": "screen", "display": "screen", "panel": "screen", "e-ink": "screen", "eink": "screen",
              "lcd": "lcd", "second screen": "lcd", "colour screen": "lcd", "color screen": "lcd",
              "speaker": "speaker", "voice": "speaker", "sound": "speaker",
              "mic": "mic", "microphone": "mic", "ears": "mic",
              "bot": "llm", "brain": "llm", "llm": "llm", "model": "llm", "ollama": "llm",
              "home": "home", "home assistant": "home", "agent": "agent", "battery": "battery"}
-CAP_LABELS = {"camera": "camera", "gps": "GPS", "screen": "screen", "lcd": "LCD", "speaker": "speaker", "mic": "mic",
-              "llm": "bot", "home": "Home Assistant", "agent": "agent", "battery": "battery"}
+CAP_LABELS = {"camera": "camera", "screen": "screen", "lcd": "LCD", "speaker": "speaker", "mic": "mic",
+              "llm": "model of its own", "home": "Home Assistant", "agent": "agent", "battery": "battery"}
 PI_WORDS = r"(?:\s+(?:pi|pie|pie-ink|pi e-ink|pieink|raspberry pi))?"
 
 _caps_cache = {"ts": 0.0, "caps": {}}
@@ -57,12 +56,6 @@ def my_caps(config, fresh=False):
         caps["turns"] = bool(caps.get("camera") and PTZ.available())
     except Exception:
         caps["turns"] = False
-    try:
-        from .gps import GPS
-        g = GPS.status()
-        caps["gps"] = bool(g.get("enabled") and (g.get("connected") or g.get("fix") != "none"))
-    except Exception:
-        caps["gps"] = False
     try:
         from . import audio
         a = config.get("audio", {})
@@ -101,13 +94,11 @@ def battery_percent():
 # -- reading the others ------------------------------------------------------------------------
 
 def describe(peer):
-    """One Pi in a line: pie-shop (workshop): camera, GPS, 2.13" e-ink, speaker · 4 s ago."""
+    """One Pi in a line: pie-shop (workshop): camera, 2.13" e-ink, speaker · 4 s ago."""
     caps = peer.get("caps") or {}
     bits = []
     if caps.get("camera"):
         bits.append("camera that turns" if caps.get("turns") else "camera")
-    if caps.get("gps"):
-        bits.append("GPS")
     if peer.get("panel"):
         bits.append(peer["panel"])
     if caps.get("lcd"):
@@ -117,7 +108,7 @@ def describe(peer):
     if caps.get("mic"):
         bits.append("mic")
     if caps.get("llm"):
-        bits.append("bot")
+        bits.append("a model of its own")
     if caps.get("home"):
         bits.append("Home Assistant")
     if caps.get("agent"):
@@ -126,6 +117,8 @@ def describe(peer):
         bits.append(f"battery {caps['battery']}%")
     where = caps.get("location") or ""
     name = f"{peer.get('host', '?')}" + (f" ({where})" if where else "")
+    if peer.get("kind") == "pitato":
+        bits.insert(0, "a Pietato camera")
     ago = peer.get("ago")
     tail = f" · {ago} s ago" if ago is not None else ""
     return f"{name}: {', '.join(bits) if bits else 'nothing it told me about'}{tail}"
@@ -151,7 +144,8 @@ def _words(text):
 def resolve(peers, name):
     """The Pi you meant by a word or two: its location ("upstairs"), its host
     name ("pie-shop"), or a bit of either. None if nothing matches."""
-    want = " ".join(_words(name)).replace("the ", "").strip()
+    from .pitato import plain_name                       # ("pietato cam": the name, however it's said)
+    want = plain_name(" ".join(_words(name))).replace("the ", "").strip().lower()
     want = re.sub(r"\b(pi|pie|pie-ink|pieink|raspberry)\b", "", want).strip()
     want = re.sub(r"'s?$", "", want).strip()
     if not want:
@@ -161,11 +155,11 @@ def resolve(peers, name):
         if loc and loc == want:
             return p
     for p in peers:
-        if (p.get("host") or "").lower() == want:
+        if plain_name(p.get("host") or "").lower() == want:
             return p
     for p in peers:
         loc = ((p.get("caps") or {}).get("location") or "").lower()
-        host = (p.get("host") or "").lower()
+        host = plain_name(p.get("host") or "").lower()
         if (loc and (want in loc or loc in want)) or want in host or host in want or want.replace(" ", "-") in host:
             return p
     return None
@@ -267,4 +261,4 @@ def where_words(peer):
     if wh.get("lat") is None:
         return "hasn't said where it is"
     place = wh.get("place") or f"{wh['lat']:.4f}, {wh['lon']:.4f}"
-    return f"at {place}" + (" (GPS)" if str(wh.get("source", "")).startswith("gps") else " (its weather spot)")
+    return f"at {place} (its weather spot)"

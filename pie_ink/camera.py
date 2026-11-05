@@ -7,6 +7,12 @@ takes as many as the Pi can encode.
 
 Sources, tried in order: the Pi camera (picamera2), a USB webcam (OpenCV),
 or a moving test pattern so the page works without any camera.
+
+A camera with two lenses (a stereo module) sends both views side by side in
+one wide frame. That's noticed by the shape, and when asked (camera.lens,
+camera.swap_lenses) the frame is taken apart here — the two swapped, or one
+of them alone — before anything downstream sees it: the page, the panel,
+the watcher, photos.
 """
 import errno
 import fcntl
@@ -31,6 +37,8 @@ BIG_FRAME = 250_000       # a JPEG this large (a camera with no small mode) goes
 PHOTO_SIZE = (1920, 1080)  # a photo is taken at the camera's biggest JPEG size up to this
 STALL_SECONDS = 2.5       # no new frame for this long and the camera is closed and opened again
 COME_BACK = 45.0          # how long a camera that stopped is waited for before giving up on it
+TWO_VIEWS = 2.5           # a frame this many times wider than high is two views side by side (a stereo camera)
+TWO_VIEWS_WIDTH = 1280    # such a pair, once taken apart and put back, is kept at most this wide
 
 # A webcam that stops sending (a USB hiccup, a firmware that chokes while its gimbal turns) leaves
 # OpenCV waiting 10 s for each frame that never comes. A few seconds is plenty to call it stuck.
@@ -504,6 +512,53 @@ class Camera:
         self.shooting = False            # taking one now
         self._paused_until = 0.0         # paused (Settings → Sound): nothing starts the camera till then
         self._small = None               # (seq, width, jpeg): the newest frame made smaller, for slow links
+        self.stereo = False              # the frames are two views side by side (a camera with two lenses)
+        self.lens = "both"               # of those: both | left | right
+        self.swap_lenses = False         # ...and each on the other side (a camera mounted upside down)
+
+    def configure(self, conf):
+        """The camera settings this keeps: which of two lenses' views to use,
+        and whether they are swapped (camera.lens, camera.swap_lenses)."""
+        lens = str((conf or {}).get("lens") or "both").lower()
+        self.lens = lens if lens in ("both", "left", "right") else "both"
+        self.swap_lenses = bool((conf or {}).get("swap_lenses"))
+
+    def _rearranging(self):
+        """True when the two views are to be swapped, or only one shown."""
+        return self.swap_lenses or self.lens != "both"
+
+    @staticmethod
+    def _two_views(img, jpg):
+        """True when a frame is two views side by side."""
+        size = img.size if img is not None else (_jpeg_size(jpg) or (0, 0))
+        return bool(size[0] and size[1] and size[0] >= TWO_VIEWS * size[1])
+
+    def _rearranged(self, img, jpg, width=TWO_VIEWS_WIDTH, quality=72):
+        """Two views side by side, as asked: each on the other side, or one of
+        them alone. (image, jpeg) — decoded here, no wider than `width`, when
+        the frame came as the camera's own JPEG."""
+        if img is None:
+            im = Image.open(io.BytesIO(jpg))
+            im.draft("RGB", (width, max(1, width * im.size[1] // max(1, im.size[0]))))   # scaled while decoding
+            im = im.convert("RGB")
+        else:
+            im = img
+        w, h = im.size
+        half = w // 2
+        left, right = im.crop((0, 0, half, h)), im.crop((half, 0, half * 2, h))
+        if self.swap_lenses:
+            left, right = right, left
+        if self.lens == "left":
+            out = left
+        elif self.lens == "right":
+            out = right
+        else:
+            out = Image.new("RGB", (half * 2, h))
+            out.paste(left, (0, 0))
+            out.paste(right, (half, 0))
+        buf = io.BytesIO()
+        out.save(buf, "JPEG", quality=quality)
+        return out, buf.getvalue()
 
     def switch(self, source):
         """Use a different camera. The capture loop restarts on the next frame
@@ -667,6 +722,12 @@ class Camera:
                 log.info("camera: no bigger picture for a photo (%s) — the stream's will do", e)
             finally:
                 self.shooting = False
+        if jpg and self._rearranging() and self._two_views(None, jpg):   # the big picture, the same way round as the stream
+            try:
+                jpg = self._rearranged(None, jpg, width=PHOTO_SIZE[0], quality=90)[1]
+            except Exception as e:
+                log.info("camera: couldn't rearrange the photo's two views (%s) — the stream's will do", e)
+                jpg = None
         req["jpeg"] = jpg or self._jpeg
         req["done"].set()
 
@@ -685,11 +746,16 @@ class Camera:
         running = self._thread is not None and self._thread.is_alive()
         age = (time.time() - self._ts) if self._ts else None
         stalled = running and age is not None and age > STALL_SECONDS and not self.shooting
+        fmt = getattr(self._source, "format", "") or ""
+        if fmt and self.stereo and self._rearranging():        # two views, taken apart here (so not passed through)
+            fmt = fmt.replace(", passed through", "") + ", " + \
+                (f"the {self.lens} view" if self.lens != "both" else "the two views swapped")
         return {"running": running,
                 "source": self.source_name, "id": getattr(self._source, "id", None),
-                "format": getattr(self._source, "format", "") or "", "fps": 0.0 if stalled else round(self.fps, 1),
+                "format": fmt, "fps": 0.0 if stalled else round(self.fps, 1),
                 "error": self.error, "age": age, "stalled": stalled, "restarts": self.restarts,
-                "stalled_at": self.stalled_at or None, "paused_for": self.paused_for()}
+                "stalled_at": self.stalled_at or None, "paused_for": self.paused_for(),
+                "stereo": self.stereo}
 
     # -- capture loop ----------------------------------------------------------------
 
@@ -828,6 +894,16 @@ class Camera:
                     buf = io.BytesIO()
                     img.save(buf, format="JPEG", quality=70)
                     jpg = buf.getvalue()
+                # a camera with two lenses sends both views side by side: swapped, or one of them, when asked
+                two = self._two_views(img, jpg)
+                if two != self.stereo:
+                    self.stereo = two
+                    log.info("camera: the picture is %s", "two views side by side" if two else "one view")
+                if two and self._rearranging():
+                    try:
+                        img, jpg = self._rearranged(img, jpg)
+                    except Exception as e:
+                        log.debug("camera: couldn't rearrange the two views: %s", e)
                 with self._new:
                     self._frame, self._jpeg, self._ts = img, jpg, t
                     self._seq += 1

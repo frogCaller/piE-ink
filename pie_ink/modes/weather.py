@@ -12,7 +12,7 @@ from PIL import Image
 from .. import weather
 from ..settings import ASSETS_DIR
 from ..text import font, text_width, wrap
-from .base import Mode
+from .base import Mode, prompt_name
 from .crypto import FACES, _cpu_temp
 
 
@@ -201,7 +201,7 @@ class WeatherMode(Mode):
         col = max(f.width // 2, int(text_width(d, "(◕‿‿◕)", font(2, round(32 * T))) + 12 * T))
 
         # prompt + big temperature
-        prompt = f"{s.get('username') or self.config.get('crypto', {}).get('username', 'pi')}>"
+        prompt = f"{prompt_name(self.config, 'weather')}>"
         age = data.get("age")
         if age and age > 1800:
             prompt += f" {int(age // 3600) or 1}h old" if age < 86400 else f" {int(age // 86400)}d old"

@@ -39,7 +39,7 @@ _PATTERNS = [
     (re.compile(r"^hub (\S+?):[\d.]+: port (\d+) disabled by hub \(EMI\?\)"),
      lambda m: (f"{m.group(1)}.{m.group(2)}", "switched off by the hub for interference, then on again")),
     (re.compile(r"^cdc_acm (\S+):[\d.]+: (ttyACM\d+): USB ACM device"),
-     lambda m: (m.group(1), f"a serial port, /dev/{m.group(2)} (a GPS receiver talks on one)")),
+     lambda m: (m.group(1), f"a serial port, /dev/{m.group(2)} (a modem or a board that talks serial)")),
     (re.compile(r"^(?:usb )?(\S+):[\d.]+: (\d+:\d+): cannot get (?:freq|min/max values|ctl value)"),
      lambda m: (m.group(1), "the sound driver couldn't read one of its settings (usually harmless)")),
 ]

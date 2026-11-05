@@ -1,0 +1,316 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1250" viewBox="0 0 1800 1250">
+<rect width="1800" height="1250" fill="#fbfaf6"/>
+<text x="60" y="72" font-family="DejaVu Sans, Verdana, sans-serif" font-size="40" fill="#1f2327" text-anchor="start" font-weight="bold" >PiE-ink  —  how it all connects</text>
+<text x="60" y="108" font-family="DejaVu Sans, Verdana, sans-serif" font-size="16" fill="#6b7278" text-anchor="start" font-weight="normal" >A Raspberry Pi Zero 2 W (any Pi works), the e-ink HAT on the header, a small LCD on eight jumpers, the rest over USB. Physical pin numbers; pin 1 is the corner pin nearest the microSD slot.</text>
+<rect x="818" y="258" width="164" height="786" rx="10" fill="#2b2f33"/>
+<text x="900" y="244" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#6b7278" text-anchor="middle" font-weight="bold" >40-pin header</text>
+<circle cx="866" cy="290" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<rect x="847" y="271" width="38" height="38" fill="none" stroke="#fff" stroke-width="2"/>
+<text x="866" y="295" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >1</text>
+<text x="804" y="295" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >3V3</text>
+<circle cx="934" cy="290" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="295" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >2</text>
+<text x="996" y="295" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >5V</text>
+<circle cx="866" cy="328" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="333" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >3</text>
+<text x="804" y="333" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO2 SDA</text>
+<circle cx="934" cy="328" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="333" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >4</text>
+<text x="996" y="333" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >5V</text>
+<circle cx="866" cy="366" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="371" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >5</text>
+<text x="804" y="371" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO3 SCL</text>
+<circle cx="934" cy="366" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="371" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >6</text>
+<text x="996" y="371" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="866" cy="404" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="409" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >7</text>
+<text x="804" y="409" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO4</text>
+<circle cx="934" cy="404" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="409" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >8</text>
+<text x="996" y="409" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO14 TXD</text>
+<circle cx="866" cy="442" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="447" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >9</text>
+<text x="804" y="447" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GND</text>
+<circle cx="934" cy="442" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="447" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >10</text>
+<text x="996" y="447" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO15 RXD</text>
+<circle cx="866" cy="480" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="485" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >11</text>
+<text x="804" y="485" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="end" font-weight="normal" >GPIO17</text>
+<text x="804" y="501" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="end" font-weight="normal" >e-ink RST</text>
+<circle cx="934" cy="480" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="485" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >12</text>
+<text x="996" y="485" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="start" font-weight="normal" >GPIO18</text>
+<text x="996" y="501" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="start" font-weight="normal" >e-ink PWR</text>
+<circle cx="866" cy="518" r="14" fill="#8e44ad" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="523" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >13</text>
+<line x1="816" y1="518" x2="852" y2="518" stroke="#8e44ad" stroke-width="4" stroke-linecap="round"/>
+<rect x="675.2" y="503" width="141" height="30" rx="8" fill="#8e44ad"/>
+<text x="745.6" y="523" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >RST · pin 13</text>
+<text x="663.2" y="523" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO27</text>
+<circle cx="934" cy="518" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="523" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >14</text>
+<text x="996" y="523" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="866" cy="556" r="14" fill="#1d9a4a" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="561" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >15</text>
+<line x1="816" y1="556" x2="852" y2="556" stroke="#1d9a4a" stroke-width="4" stroke-linecap="round"/>
+<rect x="685.1" y="541" width="131" height="30" rx="8" fill="#1d9a4a"/>
+<text x="750.5500000000001" y="561" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >DC · pin 15</text>
+<text x="673.1" y="561" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO22</text>
+<circle cx="934" cy="556" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="561" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >16</text>
+<text x="996" y="561" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO23</text>
+<circle cx="866" cy="594" r="14" fill="#d7262b" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="599" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >17</text>
+<line x1="816" y1="594" x2="852" y2="594" stroke="#d7262b" stroke-width="4" stroke-linecap="round"/>
+<rect x="675.2" y="579" width="141" height="30" rx="8" fill="#d7262b"/>
+<text x="745.6" y="599" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >VCC · pin 17</text>
+<text x="663.2" y="599" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >3V3</text>
+<circle cx="934" cy="594" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="599" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >18</text>
+<text x="996" y="599" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="start" font-weight="normal" >GPIO24</text>
+<text x="996" y="615" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="start" font-weight="normal" >e-ink BUSY</text>
+<circle cx="866" cy="632" r="14" fill="#1f63d6" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="637" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >19</text>
+<line x1="816" y1="632" x2="852" y2="632" stroke="#1f63d6" stroke-width="4" stroke-linecap="round"/>
+<rect x="675.2" y="617" width="141" height="30" rx="8" fill="#1f63d6"/>
+<text x="745.6" y="637" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >DIN · pin 19</text>
+<text x="663.2" y="637" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO10 MOSI</text>
+<circle cx="934" cy="632" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="637" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >20</text>
+<text x="996" y="637" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="866" cy="670" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="675" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >21</text>
+<text x="804" y="675" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO9 MISO</text>
+<circle cx="934" cy="670" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="675" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >22</text>
+<text x="996" y="675" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="start" font-weight="normal" >GPIO25</text>
+<text x="996" y="691" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="start" font-weight="normal" >e-ink DC</text>
+<circle cx="866" cy="708" r="14" fill="#d9a300" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="713" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >23</text>
+<line x1="816" y1="708" x2="852" y2="708" stroke="#d9a300" stroke-width="4" stroke-linecap="round"/>
+<rect x="675.2" y="693" width="141" height="30" rx="8" fill="#d9a300"/>
+<text x="745.6" y="713" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >CLK · pin 23</text>
+<text x="663.2" y="713" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO11 SCLK</text>
+<circle cx="934" cy="708" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="713" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >24</text>
+<text x="996" y="713" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="start" font-weight="normal" >GPIO8 CE0</text>
+<text x="996" y="729" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="start" font-weight="normal" >e-ink CE0</text>
+<circle cx="866" cy="746" r="14" fill="#222222" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >25</text>
+<line x1="816" y1="746" x2="852" y2="746" stroke="#222222" stroke-width="4" stroke-linecap="round"/>
+<rect x="675.2" y="731" width="141" height="30" rx="8" fill="#222222"/>
+<text x="745.6" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >GND · pin 25</text>
+<text x="663.2" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GND</text>
+<circle cx="934" cy="746" r="14" fill="#ee7a1a" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >26</text>
+<line x1="948" y1="746" x2="984" y2="746" stroke="#ee7a1a" stroke-width="4" stroke-linecap="round"/>
+<rect x="984" y="731" width="131" height="30" rx="8" fill="#ee7a1a"/>
+<text x="1049.45" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >CS · pin 26</text>
+<text x="1126.9" y="751" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO7 CE1</text>
+<circle cx="866" cy="784" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="789" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >27</text>
+<text x="804" y="789" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >ID_SD</text>
+<circle cx="934" cy="784" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="789" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >28</text>
+<text x="996" y="789" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >ID_SC</text>
+<circle cx="866" cy="822" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="827" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >29</text>
+<text x="804" y="827" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="end" font-weight="normal" >GPIO5</text>
+<text x="804" y="843" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="end" font-weight="normal" >2.7&quot; KEY1</text>
+<circle cx="934" cy="822" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="827" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >30</text>
+<text x="996" y="827" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="866" cy="860" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="865" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >31</text>
+<text x="804" y="865" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="end" font-weight="normal" >GPIO6</text>
+<text x="804" y="881" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="end" font-weight="normal" >2.7&quot; KEY2</text>
+<circle cx="934" cy="860" r="14" fill="#0e9aa7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="865" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#fff" text-anchor="middle" font-weight="bold" >32</text>
+<line x1="948" y1="860" x2="984" y2="860" stroke="#0e9aa7" stroke-width="4" stroke-linecap="round"/>
+<rect x="984" y="845" width="131" height="30" rx="8" fill="#0e9aa7"/>
+<text x="1049.45" y="865" font-family="DejaVu Sans, Verdana, sans-serif" font-size="15" fill="#fff" text-anchor="middle" font-weight="bold" >BL · pin 32</text>
+<text x="1126.9" y="865" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO12</text>
+<circle cx="866" cy="898" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="903" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >33</text>
+<text x="804" y="903" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="end" font-weight="normal" >GPIO13</text>
+<text x="804" y="919" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="end" font-weight="normal" >2.7&quot; KEY3</text>
+<circle cx="934" cy="898" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="903" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >34</text>
+<text x="996" y="903" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GND</text>
+<circle cx="866" cy="936" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="941" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >35</text>
+<text x="804" y="941" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#b4281e" text-anchor="end" font-weight="normal" >GPIO19</text>
+<text x="804" y="957" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#b4281e" text-anchor="end" font-weight="normal" >2.7&quot; KEY4</text>
+<circle cx="934" cy="936" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="941" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >36</text>
+<text x="996" y="941" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO16</text>
+<circle cx="866" cy="974" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="979" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >37</text>
+<text x="804" y="979" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GPIO26</text>
+<circle cx="934" cy="974" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="979" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >38</text>
+<text x="996" y="979" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO20</text>
+<circle cx="866" cy="1012" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="866" y="1017" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >39</text>
+<text x="804" y="1017" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="end" font-weight="normal" >GND</text>
+<circle cx="934" cy="1012" r="14" fill="#9aa1a7" stroke="#fbfaf6" stroke-width="2"/>
+<text x="934" y="1017" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#1f2327" text-anchor="middle" font-weight="bold" >40</text>
+<text x="996" y="1017" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#6b7278" text-anchor="start" font-weight="normal" >GPIO21</text>
+<rect x="1300" y="250" width="430" height="300" rx="16" fill="#2b2f33"/>
+<rect x="1324" y="274" width="382" height="186" rx="6" fill="#f3f1ea"/>
+<text x="1342" y="312" font-family="DejaVu Sans, Verdana, sans-serif" font-size="20" fill="#1f2327" text-anchor="start" font-weight="bold" >2.13&quot; · 2.7&quot; · 3.7&quot; e-ink HAT</text>
+<text x="1342" y="336" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#6b7278" text-anchor="start" font-weight="normal" >Waveshare e-Paper HAT, any of the three</text>
+<text x="1342" y="368" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#1f2327" text-anchor="start" font-weight="normal" >Plugs onto all 40 pins. It uses SPI0 — MOSI 19,</text>
+<text x="1342" y="386" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#1f2327" text-anchor="start" font-weight="normal" >SCLK 23, CE0 24 — and DC 22, RST 11, BUSY 18, PWR</text>
+<text x="1342" y="404" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#1f2327" text-anchor="start" font-weight="normal" >12: the pins marked in red. The 2.7&quot; adds four</text>
+<text x="1342" y="422" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#1f2327" text-anchor="start" font-weight="normal" >keys on 29, 31, 33 and 35 (GPIO 5, 6, 13, 19).</text>
+<rect x="1348" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1348" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1365" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1365" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1382" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1382" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1399" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1399" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1416" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1416" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1433" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1433" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1450" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1450" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1467" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1467" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1484" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1484" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1501" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1501" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1518" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1518" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1535" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1535" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1552" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1552" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1569" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1569" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1586" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1586" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1603" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1603" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1620" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1620" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1637" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1637" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1654" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1654" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1671" y="482" width="11" height="14" rx="2" fill="#c9b36a"/>
+<rect x="1671" y="504" width="11" height="14" rx="2" fill="#c9b36a"/>
+<text x="1515" y="540" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#cfd3d6" text-anchor="middle" font-weight="normal" >its 40-pin socket, straight onto the Pi's header</text>
+<line x1="986" y1="272" x2="1290" y2="272" stroke="#b4281e" stroke-width="3" stroke-dasharray="7 6"/>
+<path d="M 1290 266 L 1300 272 L 1290 278 Z" fill="#b4281e"/>
+<text x="1143.0" y="262" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#b4281e" text-anchor="middle" font-weight="normal" >plugs straight onto the header</text>
+<rect x="1300" y="590" width="430" height="176" rx="16" fill="#fff" stroke="#dcdfe3"/>
+<text x="1324" y="626" font-family="DejaVu Sans, Verdana, sans-serif" font-size="18" fill="#1f2327" text-anchor="start" font-weight="bold" >…or a PiSugar Whisplay HAT</text>
+<text x="1324" y="652" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >Instead of the e-ink HAT, the speaker and the</text>
+<text x="1324" y="672" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >microphone: its 1.69&quot; colour LCD is the screen, with</text>
+<text x="1324" y="692" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >two mics, a speaker, a button and an LED. It takes</text>
+<text x="1324" y="712" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >the whole header too, so it's either this or the</text>
+<text x="1324" y="732" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >e-ink HAT — and no second LCD, the HAT's screen is</text>
+<text x="1324" y="752" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >the one.</text>
+<rect x="1300" y="792" width="430" height="300" rx="16" fill="#fff" stroke="#dcdfe3"/>
+<text x="1324" y="828" font-family="DejaVu Sans, Verdana, sans-serif" font-size="18" fill="#1f2327" text-anchor="start" font-weight="bold" >Over USB</text>
+<text x="1324" y="852" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >The Zero's one micro-USB OTG port, through a hub</text>
+<text x="1324" y="872" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >with its own power supply (a data/OTG adapter, not a</text>
+<text x="1324" y="892" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >charge cable):</text>
+<rect x="1324" y="900" width="12" height="12" rx="2" fill="#5b6770"/>
+<text x="1346" y="911" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#1f2327" text-anchor="start" font-weight="bold" >USB speaker</text>
+<text x="1346" y="928" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >the voice and the music</text>
+<rect x="1324" y="938" width="12" height="12" rx="2" fill="#5b6770"/>
+<text x="1346" y="949" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#1f2327" text-anchor="start" font-weight="bold" >USB microphone</text>
+<text x="1346" y="966" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >the wake phrase</text>
+<rect x="1324" y="976" width="12" height="12" rx="2" fill="#5b6770"/>
+<text x="1346" y="987" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#1f2327" text-anchor="start" font-weight="bold" >Webcam, or an OBSBOT that pans and tilts</text>
+<text x="1346" y="1004" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >the live view, the watcher, photos</text>
+<rect x="1324" y="1014" width="12" height="12" rx="2" fill="#5b6770"/>
+<text x="1346" y="1025" font-family="DejaVu Sans, Verdana, sans-serif" font-size="14" fill="#1f2327" text-anchor="start" font-weight="bold" >u-blox 7 GPS dongle</text>
+<text x="1346" y="1042" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >where it is, for the weather and the map</text>
+<text x="1324" y="1074" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >A Pi camera goes on the CSI ribbon instead (the Zero's</text>
+<text x="1324" y="1090" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >small 22-pin one).</text>
+<rect x="70" y="250" width="420" height="330" rx="16" fill="#2b2f33"/>
+<rect x="110" y="276" width="340" height="200" rx="6" fill="#0d1014"/>
+<text x="128" y="312" font-family="DejaVu Sans, Verdana, sans-serif" font-size="20" fill="#fff" text-anchor="start" font-weight="bold" >1.69&quot; or 1.9&quot; LCD</text>
+<text x="128" y="336" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#9aa1a7" text-anchor="start" font-weight="normal" >Waveshare, ST7789 · 240×280 / 170×320</text>
+<text x="128" y="356" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#9aa1a7" text-anchor="start" font-weight="normal" >the second, colour screen (optional)</text>
+<text x="128" y="400" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#cfd3d6" text-anchor="start" font-weight="normal" >Eight wires to the header; each pad</text>
+<text x="128" y="418" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#cfd3d6" text-anchor="start" font-weight="normal" >below has its pin, and the pin its tag.</text>
+<text x="128" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >VCC</text>
+<rect x="114" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="128" y1="530" x2="128" y2="554" stroke="#d7262b" stroke-width="4"/>
+<text x="128" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 17</text>
+<text x="174" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >GND</text>
+<rect x="160" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="174" y1="530" x2="174" y2="554" stroke="#222222" stroke-width="4"/>
+<text x="174" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 25</text>
+<text x="220" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >DIN</text>
+<rect x="206" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="220" y1="530" x2="220" y2="554" stroke="#1f63d6" stroke-width="4"/>
+<text x="220" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 19</text>
+<text x="266" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >CLK</text>
+<rect x="252" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="266" y1="530" x2="266" y2="554" stroke="#d9a300" stroke-width="4"/>
+<text x="266" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 23</text>
+<text x="312" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >CS</text>
+<rect x="298" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="312" y1="530" x2="312" y2="554" stroke="#ee7a1a" stroke-width="4"/>
+<text x="312" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 26</text>
+<text x="358" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >DC</text>
+<rect x="344" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="358" y1="530" x2="358" y2="554" stroke="#1d9a4a" stroke-width="4"/>
+<text x="358" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 15</text>
+<text x="404" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >RST</text>
+<rect x="390" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="404" y1="530" x2="404" y2="554" stroke="#8e44ad" stroke-width="4"/>
+<text x="404" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 13</text>
+<text x="450" y="502" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="bold" >BL</text>
+<rect x="436" y="508" width="28" height="20" rx="3" fill="#e2c97e"/>
+<line x1="450" y1="530" x2="450" y2="554" stroke="#0e9aa7" stroke-width="4"/>
+<text x="450" y="572" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11" fill="#fff" text-anchor="middle" font-weight="normal" >pin 32</text>
+<rect x="70" y="620" width="420" height="218" rx="16" fill="#fff" stroke="#dcdfe3"/>
+<text x="94" y="656" font-family="DejaVu Sans, Verdana, sans-serif" font-size="18" fill="#1f2327" text-anchor="start" font-weight="bold" >Reaching the pins</text>
+<text x="94" y="682" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >The HAT covers the header, so fit an extra-tall</text>
+<text x="94" y="702" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >stacking header under it, or a 40-pin breakout, and</text>
+<text x="94" y="722" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >take the LCD's eight wires from that. The LCD shares</text>
+<text x="94" y="742" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >MOSI, SCLK, 3V3 and GND with the e-ink and has its</text>
+<text x="94" y="762" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >own chip-select (CE1), so neither waits on the</text>
+<text x="94" y="782" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >other. Don't copy Waveshare's example pins (DC 22,</text>
+<text x="94" y="802" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >CE0, BL 18): those are the HAT's.</text>
+<text x="94" y="826" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#6b7278" text-anchor="start" font-weight="normal" >Long or untidy jumpers: drop the SPI clock to 16 MHz in Settings.</text>
+<rect x="70" y="862" width="420" height="258" rx="16" fill="#fff" stroke="#dcdfe3"/>
+<text x="94" y="898" font-family="DejaVu Sans, Verdana, sans-serif" font-size="18" fill="#1f2327" text-anchor="start" font-weight="bold" >Power</text>
+<rect x="94" y="922" width="110" height="60" rx="10" fill="#f3f5f7" stroke="#dcdfe3"/>
+<text x="149.0" y="948" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13.5" fill="#1f2327" text-anchor="middle" font-weight="bold" >5 V supply</text>
+<text x="149.0" y="967" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11.5" fill="#6b7278" text-anchor="middle" font-weight="normal" >USB, 2 A or more</text>
+<rect x="230" y="922" width="130" height="60" rx="10" fill="#f3f5f7" stroke="#dcdfe3"/>
+<text x="295.0" y="948" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13.5" fill="#1f2327" text-anchor="middle" font-weight="bold" >UPS HAT</text>
+<text x="295.0" y="967" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11.5" fill="#6b7278" text-anchor="middle" font-weight="normal" >optional · a battery</text>
+<rect x="386" y="922" width="82" height="60" rx="10" fill="#f3f5f7" stroke="#dcdfe3"/>
+<text x="427.0" y="948" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13.5" fill="#1f2327" text-anchor="middle" font-weight="bold" >the Pi</text>
+<text x="427.0" y="967" font-family="DejaVu Sans, Verdana, sans-serif" font-size="11.5" fill="#6b7278" text-anchor="middle" font-weight="normal" >5 V · pins 2, 4</text>
+<line x1="204" y1="952" x2="222" y2="952" stroke="#5b6770" stroke-width="3"/>
+<path d="M 222 946 L 230 952 L 222 958 Z" fill="#5b6770"/>
+<line x1="360" y1="952" x2="378" y2="952" stroke="#5b6770" stroke-width="3"/>
+<path d="M 378 946 L 386 952 L 378 958 Z" fill="#5b6770"/>
+<text x="94" y="1012" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >A UPS HAT sits under the Pi and feeds the header's 5</text>
+<text x="94" y="1032" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >V pins, so a power cut doesn't take the screen down;</text>
+<text x="94" y="1052" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >without one, the Pi's own PWR port is fine.</text>
+<text x="94" y="1072" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >Everything else is powered from the Pi (the HAT, the</text>
+<text x="94" y="1092" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >LCD at 3.3 V) or from the hub's own supply (the USB</text>
+<text x="94" y="1112" font-family="DejaVu Sans, Verdana, sans-serif" font-size="13" fill="#1f2327" text-anchor="start" font-weight="normal" >devices).</text>
+<rect x="710" y="1082" width="380" height="86" rx="12" fill="#1e5631"/>
+<text x="900" y="1114" font-family="DejaVu Sans, Verdana, sans-serif" font-size="17" fill="#fff" text-anchor="middle" font-weight="bold" >Raspberry Pi Zero 2 W</text>
+<text x="900" y="1136" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#cfe3d4" text-anchor="middle" font-weight="normal" >or any Pi with the 40-pin header</text>
+<text x="900" y="1154" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12" fill="#cfe3d4" text-anchor="middle" font-weight="normal" >micro-USB OTG · micro-USB PWR · mini HDMI · CSI</text>
+<line x1="900" y1="1044" x2="900" y2="1082" stroke="#9aa1a7" stroke-width="3"/>
+<text x="900" y="1200" font-family="DejaVu Sans, Verdana, sans-serif" font-size="12.5" fill="#6b7278" text-anchor="middle" font-weight="normal" >red: the e-ink HAT's pins (hands off) · coloured tags: the LCD's eight wires · grey: free</text>
+</svg>

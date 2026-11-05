@@ -1,10 +1,16 @@
-"""The watchlist: which coins rotate on the display."""
+"""The watchlist: which coins and shares rotate on the Finance screen.
+
+An item is {"id", "symbol", "name", "show", "kind", "amount"?}: a coin's id is
+its CoinGecko id (bitcoin), a share's its ticker (AAPL); "kind" is "crypto"
+(the default, for lists from before shares were here) or "stock". data(),
+age() and quote() go to the right source for each, so the screens, the
+holdings total and the bot needn't care which is which."""
 import json
 import logging
 import os
 import threading
 
-from . import coingecko
+from . import coingecko, stocks
 from .settings import DATA_DIR
 
 log = logging.getLogger(__name__)
@@ -15,6 +21,9 @@ DEFAULT = [
     {"id": "bitcoin", "symbol": "BTC", "name": "Bitcoin", "show": True},
     {"id": "ethereum", "symbol": "ETH", "name": "Ethereum", "show": True},
     {"id": "dogecoin", "symbol": "DOGE", "name": "Dogecoin", "show": True},
+    {"id": "AAPL", "symbol": "AAPL", "name": "Apple Inc.", "show": True, "kind": "stock"},
+    {"id": "TSLA", "symbol": "TSLA", "name": "Tesla, Inc.", "show": True, "kind": "stock"},
+    {"id": "AMZN", "symbol": "AMZN", "name": "Amazon.com, Inc.", "show": False, "kind": "stock"},
     {"id": "litecoin", "symbol": "LTC", "name": "Litecoin", "show": False},
     {"id": "verus-coin", "symbol": "VRSC", "name": "Verus Coin", "show": False},
 ]
@@ -26,8 +35,7 @@ def load():
             try:
                 with open(PATH) as f:
                     items = json.load(f)
-                # older files mixed in stocks; keep only coins
-                return [i for i in items if i.get("kind", "crypto") == "crypto"]
+                return [i for i in items if isinstance(i, dict) and i.get("id") and kind(i) in ("crypto", "stock")]
             except (json.JSONDecodeError, OSError):
                 pass
     items = [dict(i) for i in DEFAULT]
@@ -52,14 +60,47 @@ def visible():
     return items or [dict(DEFAULT[0])]
 
 
-def add(coin_id):
+def kind(item):
+    """"stock" or "crypto"."""
+    return "stock" if (item or {}).get("kind") == "stock" else "crypto"
+
+
+def data(item, cached_only=False):
+    """The figures behind an item, from its source (CoinGecko for a coin,
+    Yahoo for a share): price, change, ranges… or None/the bundled seed."""
+    if kind(item) == "stock":
+        return stocks.stock_data(item["id"], cached_only)
+    return coingecko.coin_data(item["id"], cached_only)
+
+
+def age(item):
+    """Seconds since the item's figures were fetched, or None."""
+    if kind(item) == "stock":
+        return stocks.stock_age(item["id"])
+    return coingecko.coin_age(item["id"])
+
+
+def add(coin_id, kind_="crypto"):
+    """A coin by its CoinGecko id, or (kind_ "stock") a share by its ticker: AAPL."""
     items = load()
     if any(i["id"] == coin_id for i in items):
         return items
-    coin = next((c for c in coingecko.load_coins() if c["id"] == coin_id), None)
-    if not coin:
-        raise ValueError("unknown coin")
-    items.append({"id": coin["id"], "symbol": coin["display"], "name": coin["name"], "show": True})
+    if kind_ == "stock":
+        symbol = stocks.clean_symbol(coin_id)
+        if not symbol:
+            raise ValueError("a ticker, like AAPL or BRK-B")
+        try:
+            d = stocks.lookup(symbol)                  # it has to exist: Yahoo is asked once, now
+        except ValueError as e:
+            raise ValueError(f"no share called {symbol} ({str(e).split(': ', 1)[-1][:60]})")
+        except Exception as e:
+            raise ValueError(f"couldn't ask about {symbol} ({str(e)[:80]})")
+        items.append({"id": symbol, "symbol": symbol, "name": d.get("name") or symbol, "show": True, "kind": "stock"})
+    else:
+        coin = next((c for c in coingecko.load_coins() if c["id"] == coin_id), None)
+        if not coin:
+            raise ValueError("unknown coin")
+        items.append({"id": coin["id"], "symbol": coin["display"], "name": coin["name"], "show": True, "kind": "crypto"})
     save(items)
     return items
 
@@ -97,13 +138,17 @@ def set_amount(coin_id, amount):
 
 
 def quote(item, graph_days=7, cached_only=False):
-    """Normalised quote for a watchlist item, or None if nothing is known yet."""
+    """Normalised quote for a watchlist item — a coin's or a share's, the same
+    keys either way — or None if nothing is known yet."""
+    if kind(item) == "stock":
+        return stocks.quote(item, graph_days, cached_only)
     d = coingecko.coin_data(item["id"], cached_only)
     if not d:
         return None
     hist = coingecko.price_history(item["id"], graph_days, cached_only) or []
     price = d.get("price")
     return {
+        "kind": "crypto",
         "seed": bool(d.get("seed")),
         "as_of": d.get("as_of", ""),
         "age": coingecko.coin_age(item["id"]),

@@ -16,6 +16,10 @@ BACKOFF_BASE = 120
 BACKOFF_MAX = 3600
 
 
+LENDER = None          # (key, ttl, what's kept) -> (what another Pi has, its age) or None: asked before a fetch
+                       # (pie_ink/borrow.py: a Pietato's)
+
+
 def _path(key):
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in key)
     return os.path.join(CACHE_DIR, f"{safe}.json")
@@ -34,12 +38,24 @@ def read(key):
         return None, None
 
 
-def write(key, data):
+def write(key, data, age=0.0):
+    """Keep it — fetched just now, or `age` seconds ago (something another Pi fetched)."""
     try:
         with open(_path(key), "w") as f:
-            json.dump({"ts": time.time(), "data": data}, f)
+            json.dump({"ts": time.time() - max(0.0, age or 0.0), "data": data}, f)
     except OSError as e:
         log.warning("cache write %s failed: %s", key, e)
+
+
+def keys(prefix):
+    """The keys cached under a prefix ("hist_bitcoin_" → ["hist_bitcoin_1", "hist_bitcoin_7"...]), not the
+    failures'. Keys are as they're stored on disk (letters, digits and - _ . kept, anything else _)."""
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in prefix)
+    try:
+        names = os.listdir(CACHE_DIR)
+    except OSError:
+        return []
+    return sorted(n[:-5] for n in names if n.startswith(safe) and n.endswith(".json") and not n.endswith("__fail.json"))
 
 
 def clear(key):
@@ -55,12 +71,24 @@ def backing_off(key):
 
 
 def cached(key, ttl, fetch, cached_only=False):
-    """Fresh cache -> return it. Stale -> fetch, store, return. Fetch failure
-    -> back off and return the stale value. cached_only never fetches."""
+    """Fresh cache -> return it. Stale -> what another Pi has, when it's fresh enough (LENDER) ->
+    else fetch, store, return. Fetch failure -> back off and return the stale value. cached_only
+    never fetches."""
     data, age = read(key)
     if data is not None and (cached_only or age < ttl):
         return data
-    if cached_only or backing_off(key):
+    if cached_only:
+        return data
+    if LENDER is not None:
+        try:
+            lent = LENDER(key, ttl, data)
+        except Exception:
+            lent = None
+        if lent is not None and lent[0] is not None:
+            write(key, lent[0], lent[1])
+            clear(key + "__fail")
+            return lent[0]
+    if backing_off(key):
         return data
     try:
         fresh = fetch()

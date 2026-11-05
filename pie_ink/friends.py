@@ -2,7 +2,8 @@
 
 Every instance shouts a small JSON beacon over UDP broadcast a few times a
 minute and listens for everyone else's. No configuration, nothing leaves the
-LAN, and a Pi that goes quiet drops off the list after half a minute.
+LAN, and a Pi that goes quiet drops off the list after half a minute. A
+Pietato's camera (pie_ink/pitato.py) speaks on the same port, and is passed on.
 """
 import json
 import logging
@@ -22,7 +23,7 @@ _peers = {}
 _lock = threading.Lock()
 _status = lambda: {}     # noqa: E731  set by start()
 _where = lambda: None    # noqa: E731  set by start(): where this Pi is, if it knows
-_caps = lambda: {}       # noqa: E731  set by the app: what this Pi has (camera, GPS, speaker…) and where it lives
+_caps = lambda: {}       # noqa: E731  set by the app: what this Pi has (camera, speaker…) and where it lives
 _web_port = 5000
 
 
@@ -85,22 +86,36 @@ def _recv_loop():
     while True:
         try:
             data, (ip, _) = s.recvfrom(2048)
-            msg = json.loads(data.decode())
-            if msg.get("pie") != 1 or msg.get("id") == _id:
-                continue
-            with _lock:
-                _peers[msg["id"]] = {"id": msg["id"], "host": msg.get("host", ip), "ip": ip, "port": int(msg.get("port", 5000)),
-                                     "version": msg.get("version", ""), "panel": msg.get("panel", ""),
-                                     "mode": msg.get("mode"), "where": msg.get("where") or None,
-                                     "caps": msg.get("caps") if isinstance(msg.get("caps"), dict) else {}, "seen": time.time()}
+            heard(ip, json.loads(data.decode()))
         except Exception as e:
             log.debug("beacon receive: %s", e)
             time.sleep(0.5)
 
 
+def heard(ip, msg):
+    """One beacon: another PiE-ink's, a Pietato's ("pietato"), or a Pietato camera's ("gpicam")."""
+    if not isinstance(msg, dict):
+        return
+    if msg.get("gpicam") == 1:
+        from . import pitato
+        pitato.PITATO.camera_heard(ip, msg)
+        return
+    if msg.get("pietato") == 1:
+        from . import pitato
+        pitato.PITATO.beacon_heard(ip, msg)
+        return
+    if msg.get("pie") != 1 or msg.get("id") == _id or not isinstance(msg.get("id"), str):
+        return
+    with _lock:
+        _peers[msg["id"]] = {"id": msg["id"], "host": msg.get("host", ip), "ip": ip, "port": int(msg.get("port", 5000)),
+                             "version": msg.get("version", ""), "panel": msg.get("panel", ""),
+                             "mode": msg.get("mode"), "where": msg.get("where") or None,
+                             "caps": msg.get("caps") if isinstance(msg.get("caps"), dict) else {}, "seen": time.time()}
+
+
 def where_from(fn):
     """A function that says where this Pi is ({"lat", "lon", "place",
-    "source"} or None); it goes into the beacon so friends can map us."""
+    "source"} or None); it goes into the beacon so the others can say where we are."""
     global _where
     _where = fn
 

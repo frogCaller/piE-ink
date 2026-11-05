@@ -14,10 +14,9 @@
   };
 
   // the clock tab holds two screens; its entry flips between "clock" and "weather" with the switch on the card
-  const TAB_MODE = { clock: "clock", weather: "weather", map: "map", music: "music", message: "message", draw: "image", read: "reader", camera: "camera", crypto: "crypto", system: "system" };
-  const onWeather = () => state.tab === "weather";
+  const TAB_MODE = { clock: "clock", weather: "weather", music: "music", message: "message", draw: "image", read: "reader", camera: "camera", crypto: "crypto", system: "system" };
   const WIDE = window.matchMedia("(min-width: 900px)");     // a wide screen: columns, the side column, the action in the card
-  const MODE_LABELS = { clock: "Clock", weather: "Weather", me: "Me", finance: "Finance", music: "Music", message: "Message", image: "Drawing", reader: "Book", camera: "Camera", postcard: "Postcard", groupchat: "Group chat", crypto: "Crypto", system: "System", gps: "GPS", map: "Map", buddy: "Friend", off: "nothing" };
+  const MODE_LABELS = { clock: "Clock", weather: "Weather", me: "Me", earnings: "Earnings", music: "Music", message: "Message", image: "Drawing", reader: "Book", camera: "Camera", postcard: "Postcard", groupchat: "Group chat", crypto: "Finance", system: "System", buddy: "Friend", off: "nothing" };
   // every font file on the Pi becomes a web font here too, so dropdowns and the canvas use the real face
   const fontFamily = (id) => "pf-" + id.replace(/[^a-z0-9]/gi, "_");
   function loadWebFonts(fonts) {
@@ -103,6 +102,7 @@
     $("#lcd-crypto-field").hidden = getSetting("lcd.screen") !== "crypto";
     $("#lcd-camera-hint").hidden = getSetting("lcd.screen") !== "camera";
     syncDrawTarget();
+    syncMining();
     updateOutputs();
     const src = getSetting("message.source");
     $("#message-text-field").hidden = src !== "message";
@@ -111,7 +111,33 @@
     $("#msg-speak").hidden = src === "bot";
     $$('[data-setting="message.valign"]').forEach((el) => (el.style.display = src === "bot" ? "none" : ""));
     $("#buddy-night-row").hidden = getSetting("buddy.night") === false;
+    renderScreensCount();
   }
+
+  // Settings → Screen: one screen or two — and with two, which LCD. (setup.sh asks the same; either way
+  // it's lcd.available, and with one screen the page shows nothing about a second.)
+  function renderScreensCount() {
+    const two = !!getSetting("lcd.available");
+    for (const b of $$("#screens-count button")) b.classList.toggle("active", (b.dataset.value === "2") === two);
+    const model = String(getSetting("lcd.model") || "1.69");
+    for (const b of $$("#lcd-model-pick button")) b.classList.toggle("active", b.dataset.value === model);
+    $("#screens-row").hidden = !!state.panel.colour;            // a colour main screen (a Whisplay) is the only one
+    $("#screens-model-field").hidden = !two;
+  }
+  $("#screens-count").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-value]"); if (!b) return;
+    const two = b.dataset.value === "2";
+    setDraft("lcd.available", two);
+    setDraft("lcd.enabled", two);              // two: the LCD is used from the save on; one: it's off
+    onEdit();
+    applyPanel(state.panel);                   // the second screen's settings come into view (or go)
+    if (two) loadLcd();
+  });
+  $("#lcd-model-pick").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-value]"); if (!b) return;
+    setDraft("lcd.model", b.dataset.value);
+    onEdit();
+  });
 
   const OUTPUTS = {
     "clock.size": ["#clock-size-out", (v) => `${v}px`],
@@ -123,6 +149,10 @@
     "holdings.move_pct": ["#holdings-move-out", (v) => `±${v}%`],
     "display.full_refresh_every": ["#full-out", (v) => `${v}`],
     "lcd.brightness": ["#lcd-bright-out", (v) => `${v}%`],
+    "pet.tempo": ["#pet-tempo-out", (v) => `${Number(v).toFixed(1)} a second`],
+    "snake.decide_ms": ["#snake-decide-out", (v) => `${v} ms`],
+    "snake.speed": ["#snake-speed-out", (v) => `${v} px/s`],
+    "snake.bored_minutes": ["#snake-bored-out", (v) => (Number(v) ? `${v} min` : "never")],
     "display.brightness": ["#panel-bright-out", (v) => `${v}%`],
     "camera.interval": ["#cam-interval-out", (v) => `${Number(v).toFixed(1)}s`],
     "audio.piper_speed": ["#piper-speed-out", (v) => `${Number(v).toFixed(1)}×`],
@@ -135,7 +165,6 @@
     "reader.zoom": ["#rd-zoom-out", (v) => `${Number(v).toFixed(1)}×`],
     "reader.auto_seconds": ["#rd-auto-out", (v) => (Number(v) ? `every ${v}s` : "off")],
     "reader.rotation": ["#rd-rot-out", (v) => `${v}°`],
-    "map.zoom": ["#map-zoom-out", (v) => (Number(v) >= 16 ? `${v} · streets` : Number(v) >= 13 ? `${v} · a town` : `${v} · a region`)],
     "camera_watch.look_gap": ["#watch-gap-out", (v) => `${v}s`],
     "camera_watch.check_minutes": ["#watch-check-out", (v) => (Number(v) ? `${v} min` : "never")],
     "agent.every_minutes": ["#agent-every-out", (v) => `${v} min`],
@@ -208,10 +237,10 @@
 
   // some tabs edit more than their own section: the Me tab also owns the
   // creature and its voice, so those save with it too
-  const TAB_SECTIONS = { message: ["message", "llm"], music: ["music"], clock: ["clock"], weather: ["weather", "gps", "journey"], crypto: ["crypto", "duco", "verus", "holdings"], camera: ["camera", "ptz"] };
+  const TAB_SECTIONS = { message: ["message", "llm"], music: ["music"], clock: ["clock"], weather: ["weather"], crypto: ["crypto", "duco", "verus", "holdings"], camera: ["camera", "ptz", "pet"] };
   // what each panel saves — up here so the save buttons can ask before the panels are built
-  const SHEET_SECTIONS = ["display", "buttons", "audio", "listen", "cycle", "me", "finance", "schedule",
-                          "camera_watch", "telegram", "lcd", "whisplay", "home", "agent", "buddy"];
+  const SHEET_SECTIONS = ["display", "buttons", "audio", "listen", "cycle", "me", "earnings", "schedule",
+                          "camera_watch", "telegram", "lcd", "whisplay", "home", "gestures", "agent", "buddy", "duco", "verus", "snake"];
   const BOT_SECTIONS = ["llm", "audio", "message"];
   function tabSections(tab = state.tab) { return TAB_SECTIONS[tab] || [TAB_MODE[tab]]; }
 
@@ -293,7 +322,10 @@
       const panelNote = $("#panel-note");                      // under the panel dropdown, where it's put right
       if (panelNote) { panelNote.textContent = data.service.warning || ""; panelNote.hidden = !data.service.warning; }
       $("#live-text").textContent = data.service.panel.driver.startsWith("mock") ? `${data.hostname} · no panel` : data.hostname;
-      if (data.hostname) $("#pi-name").textContent = data.hostname;          // the Pi's card is named after it
+      if (data.hostname) {
+        $("#pi-name").textContent = data.hostname;                           // the Pi's card is named after it
+        $("#crypto-username").placeholder = data.hostname;                     // and so is the prompt on the screens, until a name is set
+      }
       renderInputs();
       updateButtons();
     } catch (e) {
@@ -314,9 +346,20 @@
     $("#keys-label").textContent = panel.buttons === 1 ? "The button" : "Keys on the HAT";
     $("#full-refresh-field").hidden = panel.has_partial === false || !!panel.colour;
     $("#lcd-panel-fields").hidden = !panel.colour;
-    $("#lcd-group").hidden = !!panel.colour;                 // the LCD is the main screen: no second one
+    // a second screen is only offered once setup.sh has been told there is one (./setup.sh, or --lcd);
+    // on a colour main screen there is no second one either way
+    const twoScreens = !!getSetting("lcd.available") && !panel.colour;
+    document.body.classList.toggle("one-screen", !twoScreens);
+    $("#lcd-group").hidden = !twoScreens;
     $("#whisplay-group").hidden = panel.driver !== "whisplay" && panel.driver !== "mock_whisplay";
     if (panel.driver === "whisplay" || panel.driver === "mock_whisplay") loadWhisplay();
+    // the GPi Case: its buttons; its screen turns only upside down, and its backlight isn't dimmable
+    const gpi = panel.driver === "gpicase" || panel.driver === "mock_gpicase";
+    $("#gpi-group").hidden = !gpi;
+    if (gpi) loadGpi();
+    for (const o of $$("#rotation-select option")) o.hidden = gpi && (o.value === "90" || o.value === "270");
+    const bright = $('[data-setting="display.brightness"]');
+    if (bright) bright.closest(".field").hidden = gpi;
     const [gw, gh] = panel.glass || [panel.width, panel.height];
     previewImg.width = gw; previewImg.height = gh;
     previewImg.style.aspectRatio = `${gw} / ${gh}`;
@@ -344,9 +387,7 @@
     for (const s of $$("section.tab")) s.hidden = s.dataset.tab !== name;
     if (name === "system") { pollSystem(); pollUpdate(); loadFriends(); renderCycle(); }
     if (name === "crypto") { loadWatchlist(); loadMining(); loadHoldings(); }
-    clearInterval(mapTimer);
-    if (name === "map") { mapFollow = true; loadMap(true); mapTimer = setInterval(loadMap, 5000); }
-    if (name === "weather") { loadWeather(); loadGps(); }
+    if (name === "weather") loadWeather();
     if (name === "music") loadMusic();
     if (name === "message") loadAudio();
     if (name === "message" && getSetting("message.source") === "bot") loadLlm(true);
@@ -356,8 +397,84 @@
     else { ptzRelease(); document.body.classList.remove("cam-turns"); }
     placeAction();
     updateButtons();
+    renderPitatoAction();
     refreshPreview();
+    if (!WIDE.matches) {                                  // the chosen chip in view in the sideways row
+      const chip = $(`#tabs button[data-tab="${name}"]`);
+      if (chip && chip.scrollIntoView) chip.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   }
+
+  // a Pietato about: every tab can put its screen on the Pietato's too — full screen, laid out for its
+  // shape — with the button beside the one that puts it on the panel. The clock and the live screens
+  // are kept up to date there each minute; the button stops that.
+  const PITATO_TABS = { clock: "clock", message: "message", draw: "drawing" };
+  let pitatoScreens = [];
+  async function loadPitatoScreens() {
+    try { pitatoScreens = (await api("/pitato/screens")).screens || []; } catch (e) { pitatoScreens = []; }
+    renderPitatoAction();
+  }
+  function pitatoKind(tab = state.tab) {
+    if (PITATO_TABS[tab]) return { kind: PITATO_TABS[tab], name: PITATO_TABS[tab] };
+    const mode = TAB_MODE[tab];
+    return mode ? { kind: "screen", name: mode } : null;
+  }
+  function renderPitatoAction() {
+    const b = $("#action-pitato");
+    if (!b) return;
+    const usable = pitatoScreens.filter((p) => !p.locked);
+    const what = pitatoKind();
+    b.hidden = !what || !usable.length;
+    if (b.hidden) return;
+    const kept = usable.some((p) => p.showing && p.showing === what.name);
+    b.classList.toggle("on", kept);
+    b.querySelector("span").textContent = kept ? "Stop sending" : usable.length > 1 ? "On a Pietato…" : "On the Pietato";
+    const label = (MODE_LABELS[TAB_MODE[state.tab]] || what.name).toLowerCase();
+    const where = usable.length > 1 ? "a Pietato's screen (or all of them)" : `${usable[0].name}'s screen`;
+    b.title = kept ? `The ${label} screen is on a Pietato, kept up to date — press to stop updating it`
+      : what.kind === "message" ? `These words on ${where}` : what.kind === "drawing" ? `This drawing on ${where}`
+      : `The ${label} screen on ${where}, full screen`;
+  }
+  async function sendToPitato(to) {
+    const b = $("#action-pitato"), what = pitatoKind();
+    if (!what) return;
+    const body = b.classList.contains("on") ? { kind: "stop", to: "all" } : { kind: what.kind, name: what.name, to };
+    if (body.kind === "message") body.text = String(getSetting("message.text") || "");
+    if (body.kind === "drawing") { stopEditing(true); body.image = flattened(); }
+    b.disabled = true;
+    try { toast((await api("/pitato/show", { method: "POST", body })).said); }
+    catch (e) { toast(e.message); }
+    b.disabled = false;
+    loadPitatoScreens();
+  }
+  // more than one Pietato about: which one (or all of them), from a small menu under the button
+  const pitatoMenu = document.createElement("div");
+  pitatoMenu.className = "pop-menu"; pitatoMenu.id = "pitato-menu"; pitatoMenu.hidden = true; pitatoMenu.setAttribute("role", "menu");
+  document.body.appendChild(pitatoMenu);
+  function closePitatoMenu() { pitatoMenu.hidden = true; }
+  function openPitatoMenu(anchor, usable) {
+    pitatoMenu.innerHTML = usable.map((p) => `<button type="button" role="menuitem" data-to="${esc(p.ip)}">${esc(p.name)}</button>`).join("")
+      + `<button type="button" role="menuitem" data-to="all">${usable.length === 2 ? "Both" : `All ${usable.length}`}</button>`;
+    pitatoMenu.hidden = false;
+    const r = anchor.getBoundingClientRect(), m = pitatoMenu.getBoundingClientRect();
+    const below = r.bottom + 6 + m.height < window.innerHeight;
+    pitatoMenu.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - 6 - m.height)}px`;
+    pitatoMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - m.width - 8, r.right - m.width))}px`;
+    pitatoMenu.querySelector("button").focus();
+  }
+  pitatoMenu.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-to]"); if (!b) return;
+    closePitatoMenu();
+    sendToPitato(b.dataset.to);
+  });
+  document.addEventListener("click", (e) => { if (!pitatoMenu.hidden && !pitatoMenu.contains(e.target) && !e.target.closest("#action-pitato")) closePitatoMenu(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pitatoMenu.hidden) closePitatoMenu(); });
+  $("#action-pitato").addEventListener("click", (e) => {
+    const b = $("#action-pitato"), usable = pitatoScreens.filter((p) => !p.locked);
+    if (!pitatoMenu.hidden) { closePitatoMenu(); return; }
+    if (!b.classList.contains("on") && usable.length > 1) { openPitatoMenu(b, usable); return; }
+    sendToPitato(usable.length ? usable[0].ip : undefined);
+  });
 
   // on a wide screen the page is a dashboard: the tabs, the Pi's vitals and the second screen
   // live in a rail down the left, the panel's screens sit under the device, and the action
@@ -366,18 +483,21 @@
   function placeAction() {
     const btn = $("#action"), tabs = $("#tabs"), rail = $("#rail");
     const panel = $("#panel-card"), lcd = $("#lcd-card"), pi = $("#pi-card"), sidebar = $("#sidebar");
+    const pit = $("#action-pitato"), now = $("#now-card");
     if (WIDE.matches) {
       const head = $(`section.tab[data-tab="${state.tab}"] > .card-head`);
       if (!head) return;
       rail.hidden = false;
       if (tabs.parentElement !== rail) rail.appendChild(tabs);
-      if (pi.parentElement !== rail) rail.appendChild(pi);
+      if (pi.parentElement !== sidebar) sidebar.appendChild(pi);  // the Pi's vitals under the device, below "Put on the panel"
       if (lcd.parentElement !== rail) rail.appendChild(lcd);
       if (btn.parentElement !== head) head.appendChild(btn);
+      if (pit.parentElement !== head) head.appendChild(pit);
     } else {
       const deck = $("#deck"), home = $("#action-home");
       if (tabs.parentElement !== deck) deck.appendChild(tabs);
       if (btn.parentElement !== home) home.appendChild(btn);
+      if (pit.parentElement !== home) home.appendChild(pit);
       if (pi.parentElement !== sidebar) sidebar.appendChild(pi);
       if (lcd.parentElement !== sidebar) sidebar.insertBefore(lcd, panel);
       rail.hidden = true;
@@ -395,7 +515,6 @@
       flashPanel();
       toast(mode === "off" ? "Screen off" : `Showing ${(MODE_LABELS[mode] || mode).toLowerCase()}`);
       await pollStatus();
-      if (onWeather()) setTimeout(loadGps, 600);
       setTimeout(refreshPreview, 900);
     } catch (e) { toast(e.message); }
   }
@@ -1868,7 +1987,7 @@
   // -- the chat bar --------------------------------------------------------------------------
 
   let chatTimer = null;
-  const HOW = { spoken: "out loud", remark: "unprompted", screen: "about your drawing", friend: "with a friend" };
+  const HOW = { spoken: "out loud", remark: "unprompted", screen: "about your drawing", friend: "with a friend", pitato: "on the Pietato" };
 
   function renderChat(items) {
     const box = $("#bubbles");
@@ -1925,6 +2044,7 @@
       const d = await api("/llm/chat", { method: "POST", body: { message } });
       if (open) renderChat(d.history || []);
       else showLatest(d.reply);
+      if (d.head && d.head.error) toast(`Its head couldn't answer: ${d.head.error}`);
       if (state.mode === "message" && getSetting("message.source") === "bot") setTimeout(refreshPreview, 800);
     } catch (err) {
       if (open) {
@@ -1973,12 +2093,25 @@
         }).join("")
       : `<div class="empty">Nothing yet. Other PiE-inks on your network appear above; say hello.</div>`;
     box.scrollTop = box.scrollHeight;
-    const friends = d.friends || [];
+    const friends = d.friends || [], rooms = new Set(d.rooms || []);
+    const named = (f) => rooms.has(f.host) ? `${f.host} (your other room)` : f.host;
     $("#group-who").textContent = friends.length
-      ? friends.map((f) => f.host).join(", ") : "no other PiE-inks found yet";
+      ? friends.map(named).join(", ") : "no other PiE-inks found yet";
     const to = $("#group-to"), chosen = to.value || "all";
     to.innerHTML = `<option value="all">Everyone</option>` + friends.map((f) =>
-      `<option value="${esc(f.host)}" ${f.host === chosen ? "selected" : ""}>${esc(f.host)}</option>`).join("");
+      `<option value="${esc(f.host)}" ${f.host === chosen ? "selected" : ""}>${esc(named(f))}</option>`).join("");
+    // "their bot" is for a friend's Pi (another house, another bot); your other rooms are the same bot
+    const onlyRooms = friends.length > 0 && friends.every((f) => rooms.has(f.host));
+    const theirBot = $("#group-mode button[data-value=ai]");
+    theirBot.hidden = onlyRooms;
+    if (onlyRooms && groupMode === "ai") {
+      groupMode = "text";
+      for (const x of $$("#group-mode button")) x.classList.toggle("active", x.dataset.value === "text");
+      $("#group-input").placeholder = "Say something…";
+    }
+    for (const id of ["group-stop", "group-speak-ai", "group-show-screen", "group-indicator"]) {
+      const el = $(`#${id}`); (el.closest("label") || el).hidden = onlyRooms;
+    }
     $("#group-speak-ai").checked = !!getSetting("social.speak_ai");
     $("#group-show-screen").checked = !!getSetting("social.show_on_screen");
     $("#group-indicator").checked = getSetting("social.indicator") !== false;
@@ -2096,7 +2229,7 @@
       const current = getSetting(sel.dataset.setting) || "";
       sel.innerHTML = "";
       sel.append(new Option(none, ""));
-      for (const it of items || []) sel.append(new Option(`${it.name} (${it.id.split(".")[1]})`, it.id));
+      for (const it of items || []) sel.append(new Option(`${it.name} (${it.id.split(".")[1]})${it.via ? ` · ${it.via}` : ""}${it.can_on === false ? " — can't turn on from off" : ""}`, it.id));
       if (current && !(items || []).some((it) => it.id === current)) sel.append(new Option(current, current));
       sel.value = current;
     }
@@ -2108,6 +2241,7 @@
       if (!ps.options.length) for (const p of d.presets || []) ps.append(new Option(p.label, p.id));
       fillHomePickers(d.players, d.remotes);
       renderInputs();
+      showHomeMac(d.tv_mac_found);
       const note = $("#home-note");
       if (!getSetting("home.enabled")) note.textContent = "Off. Switch it on, paste the address and token, press Check, pick the TV and save.";
       else if (!d.configured) note.textContent = "An address and a token are needed.";
@@ -2124,11 +2258,17 @@
       const d = await api("/home/check", { method: "POST", body: { url: getSetting("home.url"), token: getSetting("home.token") } });
       if (!d.ok) { note.textContent = `Couldn't: ${d.error}`; return; }
       fillHomePickers(d.players, d.remotes);
+      showHomeMac(d.tv_mac_found);
       const n = (d.players || []).length;
       note.textContent = `Connected to ${d.name || "Home Assistant"} (${d.version}) — ${n} media player${n === 1 ? "" : "s"}` +
         (n ? ". Pick the TV, then save." : ". No media players there yet — add the TV to Home Assistant first.");
     } catch (e) { note.textContent = e.message; }
   });
+  function showHomeMac(found) {
+    // what Home Assistant knows the TV as, so nothing need be typed; the field is only for when it doesn't
+    $("#home-mac").placeholder = found || "found from Home Assistant when it knows it";
+    $("#home-mac-note").textContent = found ? "— known" : "";
+  }
   async function homeSay(text) {
     const out = $("#home-result");
     const first = (getSetting("home.names") || "tv").split(",")[0].trim() || "tv";
@@ -2136,7 +2276,8 @@
     out.textContent = `"${text}" …`;
     try {
       const d = await api("/home/do", { method: "POST", body: { text } });
-      out.textContent = `"${text}" → ${d.reply}`;
+      const trail = (d.last && d.last.trail || []).join(" · ");
+      out.textContent = `"${text}" → ${d.reply}` + (trail ? ` (${trail})` : "");
     } catch (e) { out.textContent = `"${text}" → ${e.message}`; }
   }
   for (const b of $$("#home-try [data-say]")) b.addEventListener("click", () => homeSay(b.dataset.say));
@@ -2146,11 +2287,83 @@
     if (text) homeSay(text);
   });
 
+  // -- hand gestures ----------------------------------------------------------------------------
+
+  let gestTimer = null;
+  let gestBuilt = false;
+  function buildGestMap(d) {
+    // one row per gesture, each with what it does — the list is the help, and changing it is the remap
+    const box = $("#gest-map");
+    box.innerHTML = "";
+    for (const s of d.slots || []) {
+      const label = document.createElement("span");
+      label.textContent = s.label;
+      const sel = document.createElement("select");
+      sel.className = "words";
+      sel.dataset.setting = `gestures.${s.id}`;
+      for (const [id, name] of Object.entries(s.kind === "hold" ? d.holds : d.presses)) sel.append(new Option(name, id));
+      sel.addEventListener("change", () => { setDraft(sel.dataset.setting, sel.value); onEdit(); });
+      box.append(label, sel);
+    }
+    gestBuilt = true;
+    renderInputs();
+  }
+  function buildGestLights(d) {
+    const box = $("#gest-lights");
+    const picked = new Set(getSetting("gestures.lights") || []);
+    box.innerHTML = "";
+    if (!d.lights) { box.textContent = "Set up Home Assistant above first."; return; }
+    if (!d.lights.length) { box.textContent = "No lights in Home Assistant yet."; return; }
+    for (const l of d.lights) {
+      const row = document.createElement("label");
+      row.className = "switch";
+      row.innerHTML = `<input type="checkbox"><span>${esc(l.name)}${(d.room || []).includes(l.id) ? " · the TV's room" : ""}</span>`;
+      const box_ = row.querySelector("input");
+      box_.checked = picked.has(l.id);
+      box_.addEventListener("change", () => {
+        const now = $$("#gest-lights input").map((el, i) => el.checked ? d.lights[i].id : null).filter(Boolean);
+        const saved = (state.settings?.gestures?.lights) || [];
+        if (JSON.stringify(now) === JSON.stringify(saved)) delete state.draft["gestures.lights"];
+        else state.draft["gestures.lights"] = now;
+        onEdit();
+      });
+      box.append(row);
+    }
+    $("#gest-lights-hint").textContent = (d.room || []).length
+      ? "None ticked: the TV's room's lights." : "None ticked: every light Home Assistant has.";
+  }
+  async function loadGestures(withLights) {
+    try {
+      const d = await api("/gestures" + (withLights ? "?lights=1" : ""));
+      if (!gestBuilt) buildGestMap(d);
+      if (withLights) buildGestLights(d);
+      const note = $("#gest-note");
+      const on = getSetting("gestures.enabled");
+      let text;
+      if (d.why_not) text = d.why_not;
+      else if (!on) text = "Off.";
+      else if (d.state !== "watching") text = d.why || "Starting…";
+      else if (d.hands) text = `Seeing ${d.hands === 1 ? "a hand" : "both hands"}: ${d.mode}` + (d.last && d.last.ago < 3 ? ` — ${d.last.label}` : "");
+      else text = `Watching for your hands (${d.fps} a second).` + (d.last ? ` Last: ${d.last.label}, ${Math.round(d.last.ago)} s ago.` : "");
+      if (on && d.error) text += ` Home Assistant: ${d.error}`;
+      note.textContent = text;
+      const view = $("#gest-view");
+      const showing = on && d.state === "watching" && !$("#settings-sheet").hidden;
+      view.hidden = !showing;
+      if (showing) view.src = `/api/gestures/view?t=${Date.now()}`;
+      clearTimeout(gestTimer);
+      if (on && !$("#settings-sheet").hidden && !$('[data-pane="home"]').hidden) gestTimer = setTimeout(() => loadGestures(false), 700);
+    } catch (e) { $("#gest-note").textContent = e.message; }
+  }
+  $("#gest-view").addEventListener("error", () => { $("#gest-view").hidden = true; });
+  $("#gest-lights-more").addEventListener("toggle", (e) => { if (e.target.open) loadGestures(true); });
+
   // -- the second screen (1.69" LCD) --------------------------------------------------------
 
   let lcdTimer = null;
   let lcdPreviewUrl = null;
   async function loadLcd() {
+    if ($("#lcd-group").hidden) return;                     // one screen: nothing to show or ask
     try {
       const d = await api("/lcd");
       const sel = $("#lcd-screen");
@@ -2160,6 +2373,7 @@
         for (const m of d.models || []) ms.append(new Option(m.label, m.id));
         renderInputs();
       }
+      loadSnake();
       const st = d.status;
       const note = $("#lcd-note");
       if (!getSetting("lcd.enabled")) note.textContent = "Off. Switch it on, save, and the LCD comes to life.";
@@ -2171,9 +2385,74 @@
     clearInterval(lcdTimer);
     if (!$("#settings-sheet").hidden) lcdTimer = setInterval(refreshLcdPreview, 5000);
   }
+  // Snake: the models that can play (decision models on the bot's machine), and how the game is going
+  const DECISION_MODEL = /^(tev1|nimble|clef)/;
+  async function loadSnake() {
+    const sel = $("#snake-model"), chosen = getSetting("snake.model") || "tev1";
+    try {
+      const d = await api("/llm");
+      const names = (d.models || []).filter((m) => DECISION_MODEL.test(m));
+      // "tev1" in the settings is "tev1:latest" on the machine: the same thing
+      const same = names.find((m) => m === chosen || m === `${chosen}:latest` || (!chosen.includes(":") && m.split(":")[0] === chosen));
+      if (!same) names.unshift(chosen);
+      const html = names.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+      if (sel.innerHTML !== html) { sel.innerHTML = html; sel.value = same || chosen; }
+    } catch (e) { if (!sel.options.length) sel.innerHTML = `<option value="${esc(chosen)}">${esc(chosen)}</option>`; }
+    snakeStatus();
+  }
+  // -- yes and no with its head (the desk pet) ---------------------------------------------
+  async function loadPet() {
+    const sel = $("#pet-model"), chosen = getSetting("pet.model") || "tev1";
+    try {
+      const d = await api("/llm");
+      const names = (d.models || []).filter((m) => DECISION_MODEL.test(m));
+      const same = names.find((m) => m === chosen || m === `${chosen}:latest` || (!chosen.includes(":") && m.split(":")[0] === chosen));
+      if (!same) names.unshift(chosen);
+      const html = names.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+      if (sel.innerHTML !== html) { sel.innerHTML = html; sel.value = same || chosen; }
+    } catch (e) { if (!sel.options.length) sel.innerHTML = `<option value="${esc(chosen)}">${esc(chosen)}</option>`; }
+    petStatus();
+  }
+  async function petStatus() {
+    try {
+      const d = await api("/pet"), l = d.last || {};
+      const pct = l.answer && l.probs && l.probs[l.answer] != null ? ` (${Math.round(l.probs[l.answer] * 100)}%)` : "";
+      $("#pet-status").textContent = d.gesture ? `${d.gesture === "nod" ? "Nodding" : d.gesture === "shake" ? "Shaking its head" : "Tilting its head"}…`
+        : l.error ? l.error
+        : l.answer ? `"${l.question}" → ${l.answer}${pct}, ${l.ms} ms${l.done && !l.moved ? " — but the head didn't move" : ""}`
+        : "Nothing asked yet.";
+    } catch (e) { /* a nicety */ }
+  }
+  $("#pet-more").addEventListener("toggle", () => { if ($("#pet-more").open) loadPet(); });
+  $$("#pet-more [data-gesture]").forEach((btn) => btn.addEventListener("click", async () => {
+    try {
+      await api("/pet/try", { method: "POST", body: { gesture: btn.dataset.gesture } });
+      const t = setInterval(petStatus, 400);                   // "Nodding…" while it does, then the last answer again
+      setTimeout(() => clearInterval(t), 6000);
+    } catch (e) { toast(e.message); }
+  }));
+  async function snakeStatus() {
+    try {
+      const s = await api("/snake");
+      const best = s.best ? ` · best ${s.best}` : "";
+      $("#snake-status").textContent = s.error ? s.error
+        : s.playing ? `Playing${s.bored ? " (bored)" : ""}: score ${s.score}${best}${s.avg_ms ? ` · ${s.avg_ms} ms a decision` : ""}`
+        : s.games ? `Not playing. ${s.games} game${s.games === 1 ? "" : "s"} so far${best}${s.avg != null ? `, ${s.avg} a game lately` : ""}.`
+        : "Not playing yet.";
+    } catch (e) { /* the line is a nicety */ }
+  }
+  $("#snake-play").addEventListener("click", async () => {
+    try {
+      if (hasDraft(["snake", "lcd"])) { await api("/settings", { method: "PUT", body: draftPatch(["snake", "lcd"]) }); clearDraft(["snake", "lcd"]); }
+      await api("/settings", { method: "PUT", body: { lcd: { enabled: true, screen: "snake" } } });
+      await pollStatus(); renderInputs(); loadLcd();
+      toast("Snake is on the little screen");
+    } catch (e) { toast(e.message); }
+  });
   async function refreshLcdPreview() {
     const img = $("#lcd-preview");
     if ($("#settings-sheet").hidden) { clearInterval(lcdTimer); return; }
+    if ($("#snake-more").open) snakeStatus();                 // the game line, while the fold is open
     try {
       const draft = draftPatch(["lcd"]);
       const res = Object.keys(draft).length
@@ -2187,6 +2466,18 @@
   }
   const scheduleLcdPreview = debounce(refreshLcdPreview, 250);
 
+  async function loadGpi() {
+    try {
+      const d = await api("/gpi");
+      const pads = d.found || [];
+      const keys = (d.buttons || []).filter((b) => !["L R", "B"].includes(b.key)).map((b) => `${b.key} ${b.does}`);
+      $("#gpi-now").textContent = d.screen && keys.length ? `${d.screen}: ${keys.join(" · ")}` : "";
+      $("#gpi-note").textContent = !d.running ? "The buttons are read while the case's screen is the panel."
+        : d.problem && !pads.length ? d.problem.charAt(0).toUpperCase() + d.problem.slice(1) + "."
+        : pads.length ? `Reading ${pads.join(", ")}` + (d.last ? ` · last pressed: ${d.last.button.toUpperCase()}${d.last.did ? ` → ${d.last.did}` : ""}` : "")
+        : "No controller found yet — the case's buttons are a USB controller inside it; it's looked for every few seconds.";
+    } catch (e) { /* the note is a nicety */ }
+  }
   async function loadWhisplay() {
     try {
       const d = await api("/whisplay");
@@ -2226,7 +2517,7 @@
     openSheet("settings-sheet");
     renderTheme();
     if (pane) showPane(pane);
-    loadAudio(); loadEars(); renderCycle(); renderMe(); loadWatch(); loadTelegram(); loadHome(); loadLcd(); loadWhisplay(); pollSystem(); pollUpdate();
+    loadAudio(); loadEars(); renderCycle(); renderMe(); loadWatch(); loadTelegram(); loadHome(); loadGestures(false); loadLcd(); loadWhisplay(); pollSystem(); pollUpdate();
     loadEvents(); loadAgent(); loadBuddy();
   }
 
@@ -2274,13 +2565,58 @@
     openSheet("bot-sheet");
     renderWhere();
     loadLlm(true);
+    loadNotes();
+    loadReminders();
   }
+
+  // -- what it remembers, and what it will remind you of ---------------------------------------
+  function renderNotes(notes) {
+    $("#note-list").innerHTML = notes.length
+      ? notes.map((n) => `<li data-id="${esc(n.id)}"><span class="title">${esc(n.text)}</span><button class="remove" aria-label="Forget">×</button></li>`).join("")
+      : `<li class="empty">Nothing yet. Tell it "remember that …", or type one here.</li>`;
+  }
+  async function loadNotes() {
+    try { renderNotes((await api("/notes")).notes || []); } catch (e) { /* ignore */ }
+  }
+  $("#note-add").addEventListener("click", async () => {
+    const text = $("#note-text").value.trim();
+    if (!text) return;
+    try { renderNotes((await api("/notes", { method: "POST", body: { text } })).notes); $("#note-text").value = ""; }
+    catch (e) { toast(e.message); }
+  });
+  $("#note-text").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#note-add").click(); } });
+  $("#note-list").addEventListener("click", async (e) => {
+    const li = e.target.closest("li[data-id]"); if (!li || !e.target.closest(".remove")) return;
+    try { renderNotes((await api(`/notes/${encodeURIComponent(li.dataset.id)}`, { method: "DELETE" })).notes); } catch (err) { toast(err.message); }
+  });
+  function renderReminders(items) {
+    $("#reminder-list").innerHTML = items.length
+      ? items.map((r) => `<li data-id="${esc(r.id)}"><span class="title">${esc(r.words)}</span><button class="remove" aria-label="Cancel">×</button></li>`).join("")
+      : `<li class="empty">None set.</li>`;
+  }
+  async function loadReminders() {
+    try { renderReminders((await api("/reminders")).reminders || []); } catch (e) { /* ignore */ }
+  }
+  $("#reminder-add").addEventListener("click", async () => {
+    const text = $("#reminder-text").value.trim();
+    if (!text) return;
+    try {
+      const d = await api("/reminders", { method: "POST", body: { text } });
+      renderReminders(d.reminders); $("#reminder-text").value = ""; $("#reminder-note").textContent = d.reply;
+    } catch (e) { $("#reminder-note").textContent = e.message; }
+  });
+  $("#reminder-text").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#reminder-add").click(); } });
+  $("#reminder-list").addEventListener("click", async (e) => {
+    const li = e.target.closest("li[data-id]"); if (!li || !e.target.closest(".remove")) return;
+    try { renderReminders((await api(`/reminders/${encodeURIComponent(li.dataset.id)}`, { method: "DELETE" })).reminders); } catch (err) { toast(err.message); }
+  });
 
   const closeSettings = closeSheets;
   function showPane(name) {
     for (const b of $$("#sheet-tabs button")) b.classList.toggle("active", b.dataset.pane === name);
     for (const p of $$(".sheet .pane")) p.hidden = p.dataset.pane !== name;
     $(".sheet-body").scrollTop = 0;
+    if (name === "home") loadGestures(false);                  // (what the camera sees, while this is open)
   }
   $("#settings-btn").addEventListener("click", () => openSettings("screen"));   // always lands on Screen
   $("#show-me").addEventListener("click", async () => {
@@ -2376,7 +2712,7 @@
     const b = e.target.closest("button[data-value]"); if (!b) return;
     const pi = b.dataset.value === "pi";
     if (!pi && onThisPi(getSetting("llm.host"))) {          // going back out to the network
-      setDraft("llm.host", lastRemote || "http://192.168.0.179:11434");
+      setDraft("llm.host", lastRemote || "http://192.168.1.50:11434");
     } else if (pi) {
       setDraft("llm.host", "http://127.0.0.1:11434");
     }
@@ -2468,10 +2804,10 @@
     setDraft("schedule.blocks", blocks); renderMe(); onEdit();
   });
 
-  const MODE_PICK = [["clock", "Clock"], ["weather", "Weather"], ["me", "Me"], ["finance", "Finance"],
+  const MODE_PICK = [["clock", "Clock"], ["weather", "Weather"], ["me", "Me"], ["earnings", "Earnings"],
     ["message", "Message"], ["image", "Drawing"], ["reader", "Book"],
-    ["camera", "Camera"], ["music", "Music"], ["groupchat", "Group chat"], ["crypto", "Crypto"], ["system", "System"],
-    ["gps", "GPS"], ["map", "Map"], ["buddy", "Friend"], ["off", "Screen off"]];
+    ["camera", "Camera"], ["music", "Music"], ["groupchat", "Group chat"], ["crypto", "Finance"], ["system", "System"],
+    ["buddy", "Friend"], ["off", "Screen off"]];
 
   // -- the slideshow -------------------------------------------------------------------
   const CYCLE_PICK = MODE_PICK.filter(([v]) => v !== "off");
@@ -2487,7 +2823,7 @@
 
   // -- weather ---  // -- weather ---------------------------------------------------------------------------
 
-  const SOURCE_WORDS = { gps: " · from the GPS", network: " · from the Pi's internet address", typed: "" };
+  const SOURCE_WORDS = { network: " · from the Pi's internet address", typed: "" };
   async function loadWeather() {
     const loc = getSetting("weather.location");
     $("#wx-place").textContent = loc ? loc + (SOURCE_WORDS[getSetting("weather.source")] || "") : "not set — press Find me, or type a town";
@@ -2503,54 +2839,6 @@
       $("#wx-detail").textContent = `Feels ${Math.round(d.data.feels)}° · ${d.data.humidity}% humidity` + (day ? ` · H ${Math.round(day.hi)}° L ${Math.round(day.lo)}°` : "");
     } catch (e) { /* ignore */ }
   }
-  // -- the GPS receiver ---------------------------------------------------------------------
-
-  let gpsTimer = null;
-  async function loadGps() {
-    clearInterval(gpsTimer); gpsTimer = null;
-    if (!onWeather()) return;
-    try {
-      const d = await api("/gps");
-      const g = d.status;
-      let note;
-      if (hasDraft(["gps"])) note = "Press the button below to save.";
-      else if (g.mode === "off") note = "Off.";
-      else if (!g.enabled) note = "Auto — no receiver plugged in; it's used the moment one is.";
-      else if (g.fix !== "none") {
-        note = `${g.fix} fix · ${g.sats_used} satellites · ${Number(g.lat).toFixed(4)}, ${Number(g.lon).toFixed(4)}` + (g.place ? ` · ${g.place}` : "");
-      } else if (g.connected) note = `Searching for satellites… ${g.sats_view} in view` + (g.lat != null ? ` (last fix ${Math.round((g.fix_age || 0) / 60)} min ago)` : "");
-      else note = g.error && !/no receiver/.test(g.error) ? `Receiver trouble: ${g.error}` : "No receiver found — plug the USB GPS in, or press Why not working?";
-      if (g.enabled && g.device && g.source !== "mock") note += ` (${g.device.replace("/dev/", "")})`;
-      if (g.enabled && g.drops) note += ` · dropped off the USB bus ${g.drops === 1 ? "once" : `${g.drops} times`} this hour`;
-      $("#gps-note").textContent = note;
-      // a new spot: the weather may have moved with it, so refresh what the tab shows
-      const spot = g.fix !== "none" ? `${Number(g.lat).toFixed(3)},${Number(g.lon).toFixed(3)}|${g.place || ""}` : "";
-      if (spot && spot !== loadGps.lastSpot) { loadGps.lastSpot = spot; pollStatus().then(loadWeather); }
-      if (g.mode !== "off") gpsTimer = setInterval(loadGps, g.enabled ? 3000 : 6000);
-    } catch (e) { $("#gps-note").textContent = e.message; }
-  }
-  $("#gps-why").addEventListener("click", async () => {
-    const box = $("#gps-probe"), btn = $("#gps-why");
-    if (!box.hidden && box.dataset.done) { box.hidden = true; return; }
-    if (hasDraft(["gps"])) {
-      try { await api("/settings", { method: "PUT", body: draftPatch(["gps"]) }); clearDraft(["gps"]); updateButtons(); }
-      catch (e) { toast(e.message); }
-    }
-    box.hidden = false; box.textContent = "Checking the USB bus, the serial ports, gpsd and ModemManager, then listening to the receiver… (up to half a minute)"; btn.disabled = true;
-    try { const d = await api("/gps/probe"); box.textContent = d.text; box.dataset.done = "1"; }
-    catch (e) { box.textContent = e.message; }
-    btn.disabled = false;
-    loadGps();
-  });
-  $("#gps-show").addEventListener("click", async () => {
-    try {
-      if (hasDraft(["weather", "gps"])) { await api("/settings", { method: "PUT", body: draftPatch(["weather", "gps"]) }); clearDraft(["weather", "gps"]); }
-      await api("/mode", { method: "POST", body: { mode: "gps" } });
-      await pollStatus(); renderInputs(); updateButtons(); loadGps();
-      setTimeout(refreshPreview, 900);
-    } catch (e) { toast(e.message); }
-  });
-
   function weatherText(code) {
     const m = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Icy fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
       61: "Light rain", 63: "Rain", 65: "Heavy rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Showers", 81: "Showers", 82: "Heavy showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
@@ -2581,13 +2869,13 @@
     } catch (err) { toast(err.message); }
   });
   document.addEventListener("click", (e) => { if (!e.target.closest("#wx-search, #wx-results")) wxResults.hidden = true; });
-  // Find me: the GPS's fix, or, without one, where the Pi's internet address says it is
+  // Find me: where the Pi's internet address says it is
   $("#wx-locate").addEventListener("click", async () => {
     const btn = $("#wx-locate");
     btn.disabled = true;
     try {
       const d = await api("/weather/locate", { method: "POST", body: {} });
-      toast(`Weather for ${d.location}${d.source === "gps" ? " (the GPS)" : " (roughly — the Pi's internet address)"}`);
+      toast(`Weather for ${d.location} (roughly — the Pi's internet address)`);
       await pollStatus(); loadWeather();
       if (state.mode === "weather") setTimeout(refreshPreview, 2500);
       setTimeout(loadWeather, 4000);
@@ -2598,26 +2886,38 @@
   // -- friends: other PiE-inks on the network ---------------------------------------------
 
   let friendsOpen = false;
+  const ago = (s) => (s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`);
   async function loadFriends() {
     try {
       const d = await api("/friends");
-      $("#friends-count").textContent = d.friends.length ? `(${d.friends.length})` : "";
-      $("#friends-group").hidden = !d.friends.length;
+      const pitatos = d.pitatos || [], cams = d.cameras || [];        // the handheld Pi, and Pietato cameras (they stream like a PiE-ink's)
+      const withCamera = d.friends.concat(cams);
+      $("#friends-count").textContent = withCamera.length ? `(${withCamera.length})` : "";
+      $("#friends-group").hidden = !(d.friends.length || pitatos.length || cams.length);
+      $("#friends-label").textContent = d.friends.length ? (pitatos.length || cams.length ? "Your other rooms, and the Pietato" : "Your other rooms")
+        : "A Pietato on your network";
+      const rooms = Object.fromEntries((d.rooms || []).map((r) => [r.host, r]));
       $("#friends-list").innerHTML = d.friends.map((f) => {
-        const c = f.caps || {};
-        const has = [c.camera && "camera", c.gps && "GPS", c.lcd && `LCD ${c.lcd}"`, c.speaker && "speaker", c.mic && "mic", c.llm && "bot",
+        const c = f.caps || {}, room = rooms[f.host] || {};
+        const has = [c.camera && "camera", c.lcd && `LCD ${c.lcd}"`, c.speaker && "speaker", c.mic && "mic", c.llm && "a model",
           c.home && "Home Assistant", c.agent && "agent", c.battery != null && `battery ${c.battery}%`].filter(Boolean).join(" · ");
-        return `<li><span class="title"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.host)}</a>${c.location ? ` <span class="bkind">${esc(c.location)}</span>` : ""}<span class="bkind">${esc(f.panel)} · ${esc(f.mode || "")}${has ? ` · ${esc(has)}` : ""}</span></span><span class="prog">${esc(f.ip)}</span></li>`;
-      }).join("");
+        const kept = [room.notes && `${room.notes} note${room.notes === 1 ? "" : "s"}`, room.reminders && `${room.reminders} reminder${room.reminders === 1 ? "" : "s"}`].filter(Boolean).join(", ");
+        return `<li><span class="title"><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.host)}</a>${c.location ? ` <span class="bkind">${esc(c.location)}</span>` : ""}<span class="bkind">the same bot, in another room · ${esc(f.panel)} · ${esc(f.mode || "")}${has ? ` · ${esc(has)}` : ""}${kept ? ` · ${esc(kept)}` : ""}</span></span><span class="prog">${esc(f.ip)}</span></li>`;
+      }).concat(pitatos.map((p) => {
+        const what = [p.here ? "on this Pi" : "", p.activity || (p.asks ? "asks for the weather and prices" : ""), p.cameras.length ? `camera ${p.cameras.join(", ")}` : "", ago(p.ago)].filter(Boolean).join(" · ");
+        const name = p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name);
+        return `<li><span class="title">${name}${d.excited ? ` <span class="bkind">★</span>` : ""}<span class="bkind">Pietato · ${esc(what)}</span></span><span class="prog">${esc(p.ip)}</span></li>`;
+      })).concat(cams.filter((c) => !pitatos.some((p) => p.ip === c.ip)).map((c) =>
+        `<li><span class="title"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.host)}</a><span class="bkind">Pietato camera${c.caps.turns ? " · turns" : ""} · ${ago(c.ago)}</span></span><span class="prog">${esc(c.ip)}</span></li>`)).join("");
       if (!friendsOpen) return;
       const grid = $("#friends-grid");
-      if (!d.friends.length) { grid.innerHTML = `<div class="empty">No other PiE-ink found yet. They announce themselves every few seconds on the same Wi-Fi.</div>`; return; }
-      const want = d.friends.map((f) => f.id).join(",");
+      if (!withCamera.length) { grid.innerHTML = `<div class="empty">No other room (another PiE-ink of yours) or Pietato camera found yet. They announce themselves every few seconds on the same Wi-Fi.</div>`; return; }
+      const want = withCamera.map((f) => f.id).join(",");
       if (grid.dataset.ids === want) return;                       // keep the streams as they are
       grid.dataset.ids = want;
-      grid.innerHTML = d.friends.map((f) => `
+      grid.innerHTML = withCamera.map((f) => `
         <div class="tile"><img src="${esc(f.url)}/api/camera/stream?t=${Date.now()}" alt="${esc(f.host)}">
-          <a href="${esc(f.url)}" target="_blank" rel="noopener" title="Open ${esc(f.host)}"></a><span>${esc(f.host)}</span></div>`).join("");
+          <a href="${esc(f.url)}" target="_blank" rel="noopener" title="Open ${esc(f.host)}"></a><span>${esc(f.host)}${f.kind === "pitato" ? " · Pietato" : ""}</span></div>`).join("");
     } catch (e) { /* ignore */ }
   }
   $("#friends-btn").addEventListener("click", () => {
@@ -2729,15 +3029,14 @@
     try { await api("/events", { method: "DELETE" }); loadEvents(); } catch (e) { toast(e.message); }
   });
 
-  // -- a camera that turns: the stick, the zoom, and a look around ---------------------------
+  // -- a camera that turns: drag the picture, zoom with the wheel or a pinch, the keys, a controller --------
   const ptzState = { on: false, sid: Math.random().toString(36).slice(2, 10), seq: 0, vx: 0, vy: 0, held: false,
-    timer: null, inflight: false, zoomAt: 0, zoomTimer: null, lookTimer: null, following: false, followBusy: false, restingSaid: 0 };
-  const stick = $("#ptz-stick"), knob = $("#ptz-knob");
+    timer: null, inflight: false, pos: null, lookTimer: null, following: false, followBusy: false, restingSaid: 0 };
   const ptzOpts = () => ({ speed: Number(getSetting("ptz.speed")) || 60, swap_x: !!getSetting("ptz.swap_x"), swap_y: !!getSetting("ptz.swap_y") });
-  // following: the camera turns after you by itself, so the stick rests (and says why when touched)
+  // following: the camera turns after you by itself, so the keys and a controller rest (and say why when
+  // touched); dragging the picture, Center and Home point it somewhere, which takes over
   function setFollowing(on) {
     ptzState.following = !!on;
-    stick.classList.toggle("following", ptzState.following);
     if (!ptzState.followBusy) $("#ptz-follow").checked = ptzState.following;
     if (ptzState.following) ptzRelease();
   }
@@ -2748,6 +3047,7 @@
   }
   function ptzShow(pos) {
     if (!pos || !pos.has) return;
+    ptzState.pos = pos;
     const bits = [];
     if (ptzState.sleepNote) bits.push(ptzState.sleepNote);
     else if (ptzState.following) bits.push("Following you");
@@ -2757,21 +3057,19 @@
     }
     if (pos.has.zoom) bits.push(`zoom ${Math.round(pos.zoom * 100)}%`);
     $("#ptz-pos").textContent = bits.join(" · ");
-    $("#ptz-zoom-field").hidden = !pos.has.zoom;
-    const z = $("#ptz-zoom");
-    if (pos.has.zoom && document.activeElement !== z && !ptzState.zoomTimer && Date.now() - ptzState.zoomAt > 600) {
-      z.value = Math.round(pos.zoom * 100);
-      $("#ptz-zoom-out").textContent = `${z.value}%`;
-    }
+    camWrap.classList.toggle("steer", ptzState.on && !!(pos.has.pan || pos.has.tilt || pos.has.zoom));
   }
   async function loadPtz() {
     try {
       const d = await api("/ptz");
       ptzState.on = !!d.available;
       $("#ptz").hidden = !d.available;
+      $("#ptz-note").hidden = !d.available;
       $("#ptz-more").hidden = !d.available;
+      $("#pet-more").hidden = !d.available;
       document.body.classList.toggle("cam-turns", !!d.available && state.tab === "camera");
-      if (!d.available) return;
+      if (!d.available) { camWrap.classList.remove("steer"); return; }
+      if ($("#pet-more").open) petStatus();                  // the last answer, while the fold is open
       const f = d.follow || {};
       $("#ptz-follow-row").hidden = !f.can;
       // an OBSBOT asleep (lens down): being woken, or left to sleep when waking is off
@@ -2781,15 +3079,16 @@
         : s.asleep ? (s.wake ? "Asleep — waking it…" : "Asleep (lens down) — waking is off") : "";
       // the camera's own word, except while a look of its own has paused it (then: what the switch says)
       if (!ptzState.followBusy) setFollowing(f.can && (f.paused || f.on == null ? f.want : f.on));
-      ptzShow(d.position);
+      // a poll that lands mid-drag (or just after a move of ours) would carry an older position: skip it
+      if (!steer.dragging && Date.now() - steer.at > 800) ptzShow(d.position);
       const h = d.home;
       $("#ptz-home-note").textContent = (h ? `Home: pan ${Math.round(h.pan)}°, tilt ${Math.round(h.tilt)}°${h.zoom ? `, zoom ${Math.round(h.zoom * 100)}%` : ""}.` : "Home: straight ahead, until you make one.")
         + (d.turned ? ` Turned ${d.turned} s in the last 10 min.` : "")
         + (d.stop_owed ? " It's owed a stop (it wouldn't take one) — it goes the moment it can." : "");
-      stick.title = d.card ? `Turn the ${d.card}` : "Turn the camera";
       if (!ptzState.lookTimer) { $("#ptz-look").disabled = d.looking; $("#ptz-look").textContent = d.looking ? "Looking…" : "Look around"; }
     } catch (e) { /* not there */ }
   }
+  // turning at a speed (the arrow keys, a controller): drive beats a few times a second while held
   function ptzSend() {
     if (ptzState.inflight) return;                                 // one at a time: the next beat carries the newest
     ptzState.inflight = true;
@@ -2800,7 +3099,6 @@
   function ptzHold() {
     if (ptzState.held) return;
     ptzState.held = true;
-    stick.classList.add("held");
     ptzSend();
     ptzState.timer = setInterval(ptzSend, 150);                    // the heartbeat: silence stops the camera
   }
@@ -2809,38 +3107,144 @@
     ptzState.held = false;
     clearInterval(ptzState.timer); ptzState.timer = null;
     ptzState.vx = ptzState.vy = 0;
-    knob.style.transform = "";
-    stick.classList.remove("held");
     api("/ptz/stop", { method: "POST", body: { sid: ptzState.sid, seq: ++ptzState.seq } }).then((d) => ptzShow(d.position)).catch(() => {});
   }
-  function stickTo(dx, dy) {                                       // knob offset in px → a speed each way
-    const r = stick.getBoundingClientRect(), reach = r.width / 2 - knob.offsetWidth / 2 - 2;
-    const d = Math.hypot(dx, dy);
-    if (d > reach) { dx *= reach / d; dy *= reach / d; }
-    knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    let vx = dx / reach, vy = -dy / reach;
+  function driveTo(vx, vy) {                                       // a speed each way, -1…1, right and up positive
     if (Math.hypot(vx, vy) < 0.1) vx = vy = 0;                     // a small dead zone in the middle
-    ptzState.vx = vx; ptzState.vy = vy;
+    ptzState.vx = Math.max(-1, Math.min(1, vx)); ptzState.vy = Math.max(-1, Math.min(1, vy));
   }
-  function stickAt(e) {
-    const r = stick.getBoundingClientRect();
-    stickTo(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
-  }
-  stick.addEventListener("pointerdown", (e) => { e.preventDefault(); if (stickResting()) return; stick.setPointerCapture(e.pointerId); stickAt(e); ptzHold(); });
-  stick.addEventListener("pointermove", (e) => { if (ptzState.held && stick.hasPointerCapture(e.pointerId)) stickAt(e); });
-  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) stick.addEventListener(ev, () => { if (!keysHeld.size) ptzRelease(); });
   window.addEventListener("blur", () => { keysHeld.clear(); ptzRelease(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) { keysHeld.clear(); ptzRelease(); } });
 
-  // the arrow keys are a stick too; + and − zoom, 0 centres
+  // Dragging the picture turns the camera the way dragging a map moves it: drag left and the camera turns
+  // right, so what was off to the right comes in and whatever is under your finger stays under it. Two
+  // fingers apart (or the mouse wheel) zoom. Where it's told to point is sent as a place, not a speed, a
+  // few times a second — and once more where you let go.
+  const steer = { pts: new Map(), pan0: 0, tilt0: 0, zoom0: 0, x0: 0, y0: 0, dist0: 0, moved: false,
+    want: null, goal: null, timer: null, at: 0, inflight: false, dragging: false, badgeTimer: null };
+  const VIEW_DEG = 70, ZOOM_X = 4;      // about how wide the picture is, in degrees, at no zoom; how much the far end magnifies
+  const viewDeg = (zoom) => VIEW_DEG / (1 + (ZOOM_X - 1) * (zoom || 0));
+  const within = (v, range) => Math.max(range[0], Math.min(range[1], v));
+  function steerable() {
+    const p = ptzState.pos;
+    return ptzState.on && !!p && !!p.has && !!(p.has.pan || p.has.tilt || p.has.zoom);
+  }
+  function toCamera(dx, dy) {           // a movement on the page → the same movement in the picture's own frame (shown rotated, mirrored)
+    const rot = Number(camWrap.dataset.rot) || 0;
+    let x = dx, y = dy;
+    if (rot === 90) { x = dy; y = -dx; } else if (rot === 180) { x = -dx; y = -dy; } else if (rot === 270) { x = -dy; y = dx; }
+    if (camWrap.classList.contains("mirror")) x = -x;
+    return [x, y];
+  }
+  function pictureWidth() {             // the picture's own width on the page: it may be rotated, letterboxed or cropped
+    const W = camImg.offsetWidth || camWrap.clientWidth || 1, H = camImg.offsetHeight || camWrap.clientHeight || 1;
+    const nw = camImg.naturalWidth || 4, nh = camImg.naturalHeight || 3;
+    const whole = camWrap.classList.contains("contain") || document.fullscreenElement === camWrap;
+    return nw * (whole ? Math.min(W / nw, H / nh) : Math.max(W / nw, H / nh));
+  }
+  function pointers() {                 // the pointers' middle, and how far apart two are
+    const pts = [...steer.pts.values()];
+    const x = pts.reduce((s, p) => s + p.x, 0) / pts.length, y = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    return { x, y, dist: pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0 };
+  }
+  function steerFrom() {                // where the pointers are now is where the camera points now
+    const c = pointers(), p = ptzState.pos;
+    const g = steer.goal && (steer.timer || steer.inflight || steer.dragging) ? steer.goal : {};
+    steer.x0 = c.x; steer.y0 = c.y; steer.dist0 = c.dist;
+    steer.pan0 = g.pan != null ? g.pan : p.pan; steer.tilt0 = g.tilt != null ? g.tilt : p.tilt; steer.zoom0 = g.zoom != null ? g.zoom : p.zoom;
+  }
+  function steerMove() {
+    const p = ptzState.pos, c = pointers();
+    const [mx, my] = toCamera(c.x - steer.x0, c.y - steer.y0);
+    if (!steer.moved && Math.hypot(mx, my) < 4 && Math.abs(c.dist - steer.dist0) < 4) return;   // a tap is not a drag
+    steer.moved = true;
+    const k = viewDeg(steer.zoom0) / pictureWidth();                           // degrees a pixel
+    const sx = getSetting("ptz.swap_x") ? -1 : 1, sy = getSetting("ptz.swap_y") ? -1 : 1;
+    const want = {};
+    if (p.has.pan) {
+      want.pan = within(steer.pan0 - mx * k * sx, p.pan_range);                // left: the camera turns right
+      steer.pan0 = want.pan + mx * k * sx;                                     // at the end of its travel, the finger starts there
+    }
+    if (p.has.tilt) {
+      want.tilt = within(steer.tilt0 + my * k * sy, p.tilt_range);             // up: the camera looks down
+      steer.tilt0 = want.tilt - my * k * sy;
+    }
+    if (p.has.zoom && steer.dist0 > 0 && c.dist > 0) {
+      const mag = (1 + (ZOOM_X - 1) * steer.zoom0) * (c.dist / steer.dist0);  // the picture grows with the fingers
+      want.zoom = Math.max(0, Math.min(1, (mag - 1) / (ZOOM_X - 1)));
+    }
+    ptzWant(want);
+  }
+  function ptzWant(want) {              // the newest place; sent at most every 120 ms, one request at a time, the last always goes
+    steer.goal = Object.assign(steer.goal || {}, want);
+    steer.want = Object.assign(steer.want || {}, want);
+    if (want.zoom != null) zoomBadge(want.zoom);
+    if (steer.timer || steer.inflight) return;
+    steer.timer = setTimeout(ptzFlush, Math.max(0, 120 - (Date.now() - steer.at)));
+  }
+  async function ptzFlush() {
+    clearTimeout(steer.timer); steer.timer = null;
+    if (!steer.want || steer.inflight) return;
+    const body = steer.want;
+    steer.want = null; steer.inflight = true; steer.at = Date.now();
+    try { const d = await api("/ptz/set", { method: "POST", body }); tookOver(d); ptzShow(d.position); steer.at = Date.now(); }
+    catch (e) { toast(e.message); }
+    steer.inflight = false;
+    if (steer.want) steer.timer = setTimeout(ptzFlush, Math.max(0, 120 - (Date.now() - steer.at)));
+  }
+  function zoomBadge(zoom) {           // the zoom, over the picture, while it changes
+    const b = $("#cam-zoom");
+    b.textContent = `zoom ${Math.round(zoom * 100)}%`;
+    b.hidden = false;
+    clearTimeout(steer.badgeTimer);
+    steer.badgeTimer = setTimeout(() => { b.hidden = true; }, 1200);
+  }
+  function zoomBy(dz) {                 // the wheel, + and −, a controller's triggers
+    const p = ptzState.pos;
+    if (!steerable() || !p.has.zoom) return;
+    const base = steer.goal && steer.goal.zoom != null && (steer.timer || steer.inflight) ? steer.goal.zoom : p.zoom;
+    ptzWant({ zoom: Math.max(0, Math.min(1, base + dz)) });
+  }
+  camWrap.addEventListener("pointerdown", (e) => {
+    if (!steerable() || e.target.closest("button") || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (steer.pts.size >= 2) return;                                           // two fingers are plenty
+    e.preventDefault();
+    try { camWrap.setPointerCapture(e.pointerId); } catch (err) { /* a pointer already gone */ }
+    steer.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (steer.pts.size === 1) steer.moved = false;
+    steerFrom();                                                               // (a first finger starts from where it points now)
+    steer.dragging = true;
+    camWrap.classList.add("dragging");
+  });
+  camWrap.addEventListener("pointermove", (e) => {
+    if (!steer.pts.has(e.pointerId)) return;
+    steer.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    steerMove();
+  });
+  function steerEnd(e) {
+    if (!steer.pts.delete(e.pointerId)) return;
+    if (steer.pts.size) { steerFrom(); return; }                               // one finger left: it carries on from here
+    steer.dragging = false;
+    camWrap.classList.remove("dragging");
+    if (steer.want) ptzFlush();                                                // where you let go
+  }
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) camWrap.addEventListener(ev, steerEnd);
+  camWrap.addEventListener("dragstart", (e) => e.preventDefault());
+  camWrap.addEventListener("wheel", (e) => {
+    if (!steerable() || !ptzState.pos.has.zoom) return;
+    e.preventDefault();
+    const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;   // lines or pages → about pixels
+    zoomBy(-px / 1000);                                                        // a notch of the wheel: 10 %
+  }, { passive: false });
+
+  // the arrow keys turn it at a speed; + and − zoom, 0 centres
   const KEY_DIRS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
   const keysHeld = new Set();
   function keysDrive() {
     let vx = 0, vy = 0;
     for (const k of keysHeld) { vx += KEY_DIRS[k][0]; vy += KEY_DIRS[k][1]; }
     if (!vx && !vy) { ptzRelease(); return; }
-    const reach = stick.getBoundingClientRect().width / 2 - knob.offsetWidth / 2 - 2;
-    stickTo(vx * reach * 0.75, -vy * reach * 0.75);
+    driveTo(vx * 0.75, vy * 0.75);
     ptzHold();
   }
   document.addEventListener("keydown", (e) => {
@@ -2853,9 +3257,7 @@
       if (!keysHeld.has(e.key)) { keysHeld.add(e.key); keysDrive(); }
     } else if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_") {
       e.preventDefault();
-      const z = $("#ptz-zoom");
-      z.value = Math.max(0, Math.min(100, Number(z.value) + (e.key === "+" || e.key === "=" ? 10 : -10)));
-      z.dispatchEvent(new Event("input"));
+      zoomBy(e.key === "+" || e.key === "=" ? 0.1 : -0.1);
     } else if (e.key === "0") {
       e.preventDefault();
       $("#ptz-center").click();
@@ -2863,18 +3265,111 @@
   });
   document.addEventListener("keyup", (e) => { if (keysHeld.delete(e.key)) keysDrive(); });
 
-  // zoom: sent while you slide, at most every 120 ms, and once more where you let go
-  $("#ptz-zoom").addEventListener("input", (e) => {
-    $("#ptz-zoom-out").textContent = `${e.target.value}%`;
-    const send = async () => {
-      ptzState.zoomTimer = null; ptzState.zoomAt = Date.now();
-      try { ptzShow((await api("/ptz/set", { method: "POST", body: { zoom: Number($("#ptz-zoom").value) / 100 } })).position); }
-      catch (err) { toast(err.message); }
-    };
-    if (ptzState.zoomTimer) return;
-    const wait = Math.max(0, 120 - (Date.now() - ptzState.zoomAt));
-    ptzState.zoomTimer = setTimeout(send, wait);
+  // -- a game controller on this computer ---------------------------------------------------------
+  // The browser's Gamepad API, read here and turned into the same drive beats the arrow keys send,
+  // so nothing new reaches the Pi. The "standard" layout (Xbox, PlayStation, most others):
+  // axes 0/1 the left stick, 2/3 the right; buttons 0–3 A B X Y (✕ ○ □ △), 4/5 the bumpers,
+  // 6/7 the triggers (how far they're pulled), 9 Start, 12–15 the D-pad. Only on the Camera tab,
+  // only while this page is the one in front — a game in another window keeps its controller.
+  const pad = { on: true, id: "", seen: false, driving: false, was: [], zoomAt: 0 };
+  try { pad.on = localStorage.getItem("pieink.pad") !== "off"; } catch (e) { /* no storage */ }
+  const PAD_DEAD = 0.15;
+  function padCurve(v) {                            // a dead zone, then gentle near the middle, full at the edge
+    const a = Math.abs(v);
+    if (a < PAD_DEAD) return 0;
+    const t = (a - PAD_DEAD) / (1 - PAD_DEAD);
+    return Math.sign(v) * t * t;
+  }
+  function padFind() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const g of pads) if (g && g.connected) return g;
+    return null;
+  }
+  function padWords(g) {                            // what the buttons do, in the controller's own names
+    const sony = /playstation|dualshock|dualsense|sony|054c/i.test(g.id);
+    const [a, b, x, y] = sony ? ["✕", "○", "□", "△"] : ["A", "B", "X", "Y"];
+    const name = g.id.replace(/\s*\(.*$/, "").trim() || "Controller";
+    return `${name}: the left stick turns it, the triggers (or the right stick) zoom, ${a} centres, ${b} goes home, `
+      + `${x} looks around, ${y} takes a picture, the D-pad nudges, Start is Follow me.`
+      + (g.mapping === "standard" ? "" : " (The browser doesn't know this controller's layout, so the buttons may differ.)");
+  }
+  function padNote(text) {
+    const n = $("#ptz-pad-note");
+    if (n.textContent !== text) { n.textContent = text; n.hidden = !text; }
+    $("#ptz-pad-tag").hidden = !(pad.on && pad.id);
+  }
+  function padStop() {
+    if (!pad.driving) return;
+    pad.driving = false;
+    if (!keysHeld.size) ptzRelease();
+  }
+  function padActive() {
+    return pad.on && ptzState.on && state.tab === "camera" && !document.hidden && document.hasFocus()
+      && !document.body.classList.contains("sheet-open");
+  }
+  function padTick() {
+    if (!pad.on || !navigator.getGamepads) return;
+    const g = padFind();
+    if (!g) {
+      if (pad.id) { pad.id = ""; padStop(); }
+      if (ptzState.on) padNote(pad.seen ? "The controller went away — press a button on it." : "No controller seen yet — press a button on it.");
+      return;
+    }
+    if (g.id !== pad.id) { pad.id = g.id; pad.seen = true; pad.was = []; padNote(padWords(g)); }
+    if (!padActive()) { padStop(); pad.was = g.buttons.map((b) => b.pressed); return; }
+    const axis = (i) => padCurve(g.axes[i] || 0);
+    const down = (i) => !!(g.buttons[i] && g.buttons[i].pressed);
+    const pull = (i) => (g.buttons[i] ? g.buttons[i].value : 0);
+    // the left stick, or the D-pad at three-quarters
+    let vx = axis(0), vy = -axis(1);
+    if (down(14)) vx -= 0.75;
+    if (down(15)) vx += 0.75;
+    if (down(12)) vy += 0.75;
+    if (down(13)) vy -= 0.75;
+    if (vx || vy) {
+      if (!stickResting()) {
+        driveTo(vx, vy);
+        pad.driving = true;
+        ptzHold();
+      }
+    } else if (pad.driving) {
+      padStop();
+    }
+    // zoom: the triggers, as far as they're pulled, or the right stick up and down; the bumpers step 10 %
+    if (ptzState.pos && ptzState.pos.has && ptzState.pos.has.zoom) {
+      const pressed = g.buttons.map((b) => b.pressed);
+      const rate = (pull(7) - pull(6)) - axis(3);
+      const now = performance.now();
+      let step = 0;
+      if (rate && now - pad.zoomAt > 100) { pad.zoomAt = now; step = rate * 4; }
+      if (pressed[5] && !pad.was[5]) step += 10;
+      if (pressed[4] && !pad.was[4]) step -= 10;
+      if (step) zoomBy(step / 100);
+    }
+    // the buttons, on the press
+    const pressed = g.buttons.map((b) => b.pressed);
+    const hit = (i) => pressed[i] && !pad.was[i];
+    if (hit(0)) $("#ptz-center").click();
+    if (hit(1)) $("#ptz-home").click();
+    if (hit(2)) $("#ptz-look").click();
+    if (hit(3)) $("#photo-take").click();
+    if (hit(9) && !$("#ptz-follow-row").hidden) $("#ptz-follow").click();
+    pad.was = pressed;
+  }
+  if (navigator.getGamepads) {
+    setInterval(padTick, 50);
+    window.addEventListener("gamepadconnected", padTick);
+    window.addEventListener("gamepaddisconnected", padTick);
+  } else {
+    $("#ptz-pad").closest(".switches").hidden = true;
+  }
+  $("#ptz-pad").checked = pad.on;
+  $("#ptz-pad").addEventListener("change", (e) => {
+    pad.on = e.target.checked;
+    try { localStorage.setItem("pieink.pad", pad.on ? "on" : "off"); } catch (err) { /* ignore */ }
+    if (!pad.on) { padStop(); pad.id = ""; padNote(""); } else padTick();
   });
+
   const tookOver = (d) => { if (d.stopped_following) { setFollowing(false); toast("Stopped following you"); } };
   $("#ptz-center").addEventListener("click", async () => {
     try { const d = await api("/ptz/set", { method: "POST", body: { center: true } }); tookOver(d); ptzShow(d.position); } catch (e) { toast(e.message); }
@@ -3060,7 +3555,7 @@
     $("#buddy-group").classList.toggle("on", !!d.enabled);
     const note = d.enabled ? `Sees with ${SEES[d.sees] || d.sees}` + (d.error ? ` · ${d.error}` : "")
       + (d.why && /resting/.test(d.why) ? ` · ${d.why}` : "")
-      : "It looks around by itself, says hi when it sees someone, and is surprised by what's new. Settings → Friend for more.";
+      : "Looks around by itself, says hi, is surprised by what's new. Settings → Friend.";
     $("#buddy-note").textContent = note;
     const pane = $("#buddy-pane-note");
     if (pane) pane.textContent = d.enabled ? `${d.face}  ${d.caption}` + (d.line ? ` — last said "${d.line}"` : "") + ` · sees with ${SEES[d.sees] || d.sees}` : "";
@@ -3109,7 +3604,7 @@
   camImg.addEventListener("click", () => { if (badgeText && !badgeKeep) showBadge(badgeText, badgeKey, false, true); });
 
   async function pollCamera() {
-    if (ptzState.on && !ptzState.held) loadPtz();
+    if (ptzState.on && !ptzState.held && !steer.dragging) loadPtz();
     loadBuddy();
     try {
       const st = await api("/camera/status");
@@ -3123,6 +3618,9 @@
         : !st.running ? (st.source ? `${st.source} · starting…` : "starting…") : "";
       if (problem) showBadge(problem, "problem", true);
       else showBadge(st.source + (st.format ? ` · ${st.format}` : "") + rate + again, `${st.id}|${st.format}`, false);
+      // a camera with two lenses sends both views side by side: which to show, and swapped
+      $("#cam-lenses-row").hidden = !st.stereo;
+      $("#cam-swap-row").hidden = !st.stereo;
       // the camera gave up (or stopped) while this page watched: ask for it again, now and then
       if (state.tab === "camera" && !st.running && Date.now() - camStreamAt > 10000) restartStream();
     } catch (e) { /* ignore */ }
@@ -3139,6 +3637,20 @@
       setTimeout(refreshPreview, 1500);
     } catch (e) { toast(e.message); }
   });
+  // a camera with two lenses: which view, and the two swapped — saved at once, like the rotation,
+  // since the Pi rearranges the picture and the live view shows it straight away
+  async function saveLenses(key, value) {
+    try {
+      await api("/settings", { method: "PUT", body: { camera: { [key]: value } } });
+      delete state.draft[`camera.${key}`];
+      await pollStatus();
+    } catch (e) { toast(e.message); }
+  }
+  $('[data-setting="camera.swap_lenses"]').addEventListener("change", (e) => saveLenses("swap_lenses", e.target.checked));
+  $('[data-setting="camera.lens"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (b) saveLenses("lens", b.dataset.value);
+  });
   camImg.addEventListener("error", () => {
     if (state.tab === "camera" && camImg.getAttribute("src")) setTimeout(() => { if (state.tab === "camera") restartStream(); }, 2000);
   });
@@ -3146,10 +3658,11 @@
   // -- watchlist ------------------------------------------------------------------------
 
   let watch = [];
-  const fmtPrice = (p) => {
+  // a price in its own money: $ for a coin, the exchange's currency for a share (£, €, ¥…)
+  const fmtPrice = (p, money = "$") => {
     if (p == null) return "";
     const d = p >= 10000 ? 0 : p >= 1 ? 2 : Math.min(8, -Math.floor(Math.log10(p)) + 2);
-    return "$" + p.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+    return money + p.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
   };
 
   async function loadWatchlist() {
@@ -3161,6 +3674,17 @@
   let miningTimer = null;
   const POOL_WHO = { duco: "duco.username", verus: "verus.wallet" };
   const POOL_NAMES = { duco: "Duino-Coin", verus: "Verus" };
+  // a pool you don't mine stays out of the page (setup.sh asks; Settings → You has the switches)
+  function syncMining() {
+    const show = { duco: getSetting("duco.show") !== false, verus: getSetting("verus.show") !== false };
+    for (const el of $$("#mining-more .pool")) el.hidden = !show[el.dataset.pool];
+    $("#mining-more .pool-split").hidden = !(show.duco && show.verus);
+    $("#mining-group").hidden = !(show.duco || show.verus);
+    const off = Object.entries(POOL_NAMES).filter(([p]) => show[p]).map(([, n]) => n).join(", ");
+    const sum = $("#mining-sum");
+    sum.dataset.off = off ? `${off} — off` : "";
+    if (!sum.textContent || sum.textContent.endsWith("— off")) sum.textContent = sum.dataset.off;
+  }
   // the miners fold away under one heading; how you left it is remembered
   const miningMore = $("#mining-more");
   try { miningMore.open = localStorage.getItem("pieink.miningOpen") === "1"; } catch (e) { /* no storage */ }
@@ -3203,7 +3727,7 @@
           return `<li class="lv-${m.alert ? "alert" : "note"}"><time>${esc(hashText(w.hashrate))}</time><span>${esc(w.identifier)}${sub ? `<small>${esc(sub)}</small>` : ""}</span></li>`;
         }).join("");
       }
-      $("#mining-sum").textContent = sum.length ? sum.join(" · ") : "Duino-Coin, Verus — off";
+      $("#mining-sum").textContent = sum.length ? sum.join(" · ") : ($("#mining-sum").dataset.off || "Duino-Coin, Verus — off");
       if (any) miningTimer = setInterval(loadMining, 30000);
     } catch (e) { for (const n of $$(".mining-note")) n.textContent = e.message; }
   }
@@ -3230,26 +3754,31 @@
   const fmtSigned = (v) => (v >= 0 ? "+" : "−") + fmtMoney(Math.abs(v));
   const fmtPct = (v) => (v == null ? "" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
   function worthLine(i) {
-    // what this coin's amount is worth, and what today did to it
+    // what this amount is worth, and what today did to it (a share in another currency: in that currency)
     if (!(i.amount > 0) || i.price == null) return i.amount > 0 ? "no price yet" : "";
-    const v = i.amount * i.price, ch = i.change_1d;
+    const v = i.amount * i.price, ch = i.change_1d, money = i.money || "$";
     const day = ch == null ? null : v - v / (1 + ch / 100);
-    return `${fmtMoney(v)}${day == null ? "" : `<small class="${day >= 0 ? "up" : "down"}">${fmtSigned(day)} today</small>`}`;
+    const worth = money === "$" ? fmtMoney(v) : fmtPrice(v, money);
+    const moved = day == null ? "" : money === "$" ? fmtSigned(day) : (day >= 0 ? "+" : "−") + fmtPrice(Math.abs(day), money);
+    return `${worth}${day == null ? "" : `<small class="${day >= 0 ? "up" : "down"}">${moved} today</small>`}`;
   }
   function renderWatch() {
     const on = watch.filter((i) => i.show).length;
-    $("#watch-hint").textContent = on ? `${on} in rotation, ${watch.length - on} paused.` : "Nothing ticked, so Bitcoin will show.";
+    const shares = watch.filter((i) => i.kind === "stock").length;
+    $("#watch-hint").textContent = on ? `${on} in rotation, ${watch.length - on} paused.${shares ? " Share prices are Yahoo's, a few minutes behind." : ""}`
+      : "Nothing ticked, so Bitcoin will show.";
     $("#watch-list").innerHTML = watch.map((i) => {
-      const ch = i.change_1d;
+      const ch = i.change_1d, stock = i.kind === "stock";
       const chTxt = ch == null ? "" : `<span class="${ch >= 0 ? "up" : "down"}">${ch >= 0 ? "+" : ""}${ch.toFixed(2)}%</span>`;
+      const tag = stock ? `<span class="tag" title="A share${i.exchange ? ` on ${esc(i.exchange)}` : ""}">${esc(i.exchange || "share")}</span>` : "";
       return `<li class="${i.show ? "" : "off"}" data-id="${esc(i.id)}">
-        <span class="name">${esc(i.name)}<span class="sym">${esc(i.symbol)}</span></span>
-        <span class="price"><b>${fmtPrice(i.price)}</b>${chTxt}</span>
+        <span class="name">${esc(i.name)}<span class="sym">${esc(i.symbol)}${tag}</span></span>
+        <span class="price"><b>${fmtPrice(i.price, i.money || "$")}</b>${chTxt}</span>
         <input type="checkbox" ${i.show ? "checked" : ""} aria-label="Show ${esc(i.name)}">
         <button class="remove" aria-label="Remove ${esc(i.name)}">×</button>
         <label class="hold"><span>You hold</span>
           <input type="number" class="hold-amount" min="0" step="any" inputmode="decimal" placeholder="0" value="${i.amount > 0 ? esc(i.amount) : ""}" aria-label="How much ${esc(i.name)} you hold">
-          <span class="sym">${esc(i.symbol)}</span><b>${worthLine(i)}</b>
+          <span class="sym">${stock ? "shares" : esc(i.symbol)}</span><b>${worthLine(i)}</b>
         </label>
       </li>`;
     }).join("");
@@ -3302,6 +3831,7 @@
         if (d.move) bits.push(`${d.move.kind === "crash" ? "A crash" : "A rally"} today`);
         if (d.slump) bits.push(`${Math.round(d.slump.pct)}% below the peak`);
         if (v.unknown && v.unknown.length) bits.push(`no price yet for ${v.unknown.join(", ")}`);
+        if (v.foreign && v.foreign.length) bits.push(`${v.foreign.join(", ")} not in the total (another currency)`);
         $("#worth-note").textContent = bits.join(" · ");
         drawWorth(d.history || [], d.line);
       }
@@ -3342,11 +3872,12 @@
   const search = debounce(async (q) => {
     if (!q) { results.hidden = true; return; }
     try {
-      const { results: hits } = await api(`/coins/search?q=${encodeURIComponent(q)}`);
-      results.innerHTML = hits.length
-        ? hits.map((h) => `<li data-id="${esc(h.id)}" data-symbol="${esc(h.symbol)}">
-            <span class="sym">${esc(h.symbol)}</span><span class="name">${esc(h.name)}</span><span class="kind">${h.rank ? "#" + h.rank : ""}</span></li>`).join("")
-        : `<li class="empty">Nothing found for “${esc(q)}”</li>`;
+      const { results: hits, note } = await api(`/coins/search?q=${encodeURIComponent(q)}`);
+      // coins carry their CoinGecko rank; shares the exchange they trade on
+      results.innerHTML = (hits.length
+        ? hits.map((h) => `<li data-id="${esc(h.id)}" data-symbol="${esc(h.symbol)}" data-kind="${esc(h.kind || "crypto")}">
+            <span class="sym">${esc(h.symbol)}</span><span class="name">${esc(h.name)}</span><span class="kind${h.kind === "stock" ? " ex" : ""}">${h.kind === "stock" ? esc(h.exchange || "share") : h.rank ? "#" + h.rank : "coin"}</span></li>`).join("")
+        : `<li class="empty">Nothing found for “${esc(q)}”</li>`) + (note ? `<li class="empty">${esc(note)}</li>` : "");
       results.hidden = false;
     } catch (e) { results.innerHTML = `<li class="empty">${esc(e.message)}</li>`; results.hidden = false; }
   }, 300);
@@ -3360,7 +3891,7 @@
     results.hidden = true;
     $("#watch-search").value = "";
     try {
-      watch = (await api("/watchlist", { method: "POST", body: { id: li.dataset.id } })).items;
+      watch = (await api("/watchlist", { method: "POST", body: { id: li.dataset.id, kind: li.dataset.kind || "crypto" } })).items;
       renderWatch();
       toast(`Added ${li.dataset.symbol}`);
     } catch (err) { toast(err.message); }
@@ -3392,114 +3923,6 @@
   }
   WIDE.addEventListener("change", (e) => { if (e.matches) { pollSystem(); pollNow(); } });
 
-  // -- the map: the page draws its own (Leaflet, bundled), the Pi tells it where everyone is ------
-  let leaflet = null, meMarker = null, mapTimer = null, mapFollow = true;
-  const friendMarkers = {};
-  function ensureLeaflet(tiles) {
-    if (leaflet || typeof L === "undefined") return leaflet;
-    leaflet = L.map("map", { zoomControl: true }).setView([20, 0], 2);
-    L.tileLayer(tiles || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(leaflet);
-    leaflet.on("dragstart", () => { mapFollow = false; });      // you took over; Centre puts it back
-    return leaflet;
-  }
-  function mapStat(label, value) { return `<div><span><dt>${esc(label)}</dt><dd>${esc(value)}</dd></span></div>`; }
-  async function loadMap(first = false) {
-    if (state.tab !== "map") return;
-    try {
-      const d = await api("/map");
-      const m = ensureLeaflet(d.tiles);
-      if (!m) { $("#map-note").textContent = "The map library didn't load — reload the page."; return; }
-      m.invalidateSize();
-      const me = d.me, g = d.gps || {};
-      const stats = [];
-      if (me) {
-        stats.push(mapStat("Position", `${me.lat.toFixed(5)}, ${me.lon.toFixed(5)}`));
-        if (me.place) stats.push(mapStat("Place", me.place));
-        stats.push(mapStat("From", me.source === "gps" ? `GPS · ${me.fix} fix · ${me.sats} satellites` : me.source === "gps_last"
-          ? `GPS · last fix${me.fix_age != null ? ` ${Math.round(me.fix_age / 60)} min ago` : ""}` : "the weather location"));
-        if (me.alt_m != null) stats.push(mapStat("Altitude", `${Math.round(me.alt_m)} m`));
-        if (me.speed_kmh != null) stats.push(mapStat("Speed", `${Math.round(me.speed_kmh)} km/h`));
-        if (me.course != null) stats.push(mapStat("Heading", `${Math.round(me.course)}°`));
-      } else if (g.enabled && !g.connected) {
-        stats.push(mapStat("GPS", "no receiver plugged in"));
-      } else if (g.enabled) {
-        stats.push(mapStat("GPS", `searching · ${g.sats_view || 0} in view`));
-      }
-      if (d.friends.length) stats.push(mapStat("Friends", d.friends.map((f) => f.host).join(", ")));
-      $("#map-stats").innerHTML = stats.join("");
-      $("#map-stats").hidden = !stats.length;
-      $("#map-badge").textContent = me ? (me.source === "gps" ? `GPS · ${me.sats} sats` : me.source === "gps_last" ? "GPS · last fix" : "weather location") : "no position";
-      $("#map-note").textContent = me ? "" : "No position yet: plug the GPS in, or set a town under Weather in the Clock tab.";
-      $("#map-cache").textContent = d.cache && d.cache.tiles ? `${d.cache.tiles} tiles kept on the Pi (${(d.cache.bytes / 1048576).toFixed(1)} MB).` : "No tiles fetched yet.";
-      if (me) {
-        const ll = [me.lat, me.lon];
-        if (!meMarker) {
-          meMarker = L.circleMarker(ll, { radius: 8, color: "#ffffff", weight: 2, fillColor: "#0b7285", fillOpacity: 1 }).addTo(m);
-          meMarker.bindTooltip(d.me_host || "this Pi");
-        } else meMarker.setLatLng(ll);
-        meMarker.setStyle({ fillColor: me.source === "gps" ? "#0b7285" : "#6a7078" });
-        if (first) m.setView(ll, Math.max(m.getZoom() || 0, d.zoom || 15), { animate: false });
-        else if (mapFollow) m.panTo(ll, { animate: true });
-      }
-      const seen = new Set();
-      for (const f of d.friends) {
-        seen.add(f.host);
-        const ll = [f.lat, f.lon];
-        if (!friendMarkers[f.host]) {
-          friendMarkers[f.host] = L.circleMarker(ll, { radius: 7, color: "#ffffff", weight: 2, fillColor: "#8a5cf6", fillOpacity: 1 }).addTo(m);
-          friendMarkers[f.host].bindTooltip(`${f.host}${f.place ? " · " + f.place : ""}`);
-        } else friendMarkers[f.host].setLatLng(ll);
-      }
-      for (const h of Object.keys(friendMarkers)) if (!seen.has(h)) { m.removeLayer(friendMarkers[h]); delete friendMarkers[h]; }
-      if (first && me && d.friends.length) {
-        const b = L.latLngBounds([[me.lat, me.lon], ...d.friends.map((f) => [f.lat, f.lon])]);
-        if (b.isValid() && !m.getBounds().contains(b)) m.fitBounds(b.pad(0.3), { animate: false, maxZoom: d.zoom || 15 });
-      }
-      // the trail: drawn on the first look, and today's grows while you watch
-      if (first) loadJourney();
-      else if (journeyDay && Date.now() - journeyAt > 60000 && $("#journey-day").value === $("#journey-day").options[0]?.value) loadJourney(journeyDay);
-    } catch (e) { $("#map-note").textContent = e.message; }
-  }
-  // -- where it has been: the journey ---------------------------------------------------------
-  let journeyLine = null, journeyStart = null, journeyDay = "", journeyAt = 0;
-  async function loadJourney(day, fit = false) {
-    const m = leaflet;
-    if (!m) return;
-    try {
-      const d = await api(`/journey${day ? `?day=${encodeURIComponent(day)}` : ""}`);
-      journeyDay = d.day; journeyAt = Date.now();
-      const sel = $("#journey-day");
-      const days = (d.days.includes(d.today) ? d.days : [...d.days, d.today]).slice().reverse();
-      const options = days.map((x) => `<option value="${esc(x)}">${x === d.today ? "Today" : esc(new Date(x + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }))}</option>`).join("");
-      if (sel.innerHTML !== options) sel.innerHTML = options;
-      sel.value = d.day;
-      $("#journey-note").textContent = d.summary || (d.status && d.status.enabled ? (d.day === d.today ? "No track yet today — it draws itself as the GPS moves." : `Nothing recorded for ${d.day}.`) : "The journey log is off (Clock tab → GPS).");
-      if (journeyLine) { m.removeLayer(journeyLine); journeyLine = null; }
-      if (journeyStart) { m.removeLayer(journeyStart); journeyStart = null; }
-      if (!$("#journey-show").checked || (d.points || []).length < 2) return;
-      const latlngs = d.points.map((p) => [p[1], p[2]]);
-      journeyLine = L.polyline(latlngs, { color: "#0b7285", weight: 4, opacity: 0.85, lineJoin: "round" }).addTo(m);
-      journeyStart = L.circleMarker(latlngs[0], { radius: 6, color: "#0b7285", weight: 2, fillColor: "#ffffff", fillOpacity: 1 }).addTo(m);
-      journeyStart.bindTooltip("Set off here");
-      if (fit) { mapFollow = false; m.fitBounds(journeyLine.getBounds().pad(0.15), { animate: false, maxZoom: 16 }); }
-    } catch (e) { $("#journey-note").textContent = e.message; }
-  }
-  $("#journey-day").addEventListener("change", (e) => loadJourney(e.target.value, true));
-  $("#journey-show").addEventListener("change", () => loadJourney(journeyDay || undefined));
-  $("#journey-forget").addEventListener("click", async () => {
-    if (!confirm(`Forget the track for ${journeyDay || "today"}?`)) return;
-    try { await api(`/journey?day=${encodeURIComponent(journeyDay || "")}`, { method: "DELETE" }); loadJourney(); }
-    catch (e) { toast(e.message); }
-  });
-
-  $("#map-centre").addEventListener("click", () => { mapFollow = true; loadMap(true); });
-  $("#map-prefetch").addEventListener("click", async () => {
-    try { const d = await api("/map/prefetch", { method: "POST" }); $("#map-cache").textContent = d.started ? "Fetching the tiles for the panel…" : "Already fetching."; setTimeout(loadMap, 3000); }
-    catch (e) { $("#map-cache").textContent = e.message; }
-  });
-
   // -- the side column: what is going on, the screens, the second screen ----------------------
   const NOW_EVERY = 15000;
   function nowRow(label, text, cls = "") {
@@ -3515,12 +3938,16 @@
       if (d.watcher) rows.push(nowRow("Watching", d.watcher.state === "something" ? "something moved just now"
         : d.watcher.seen_ago != null ? `quiet for ${d.watcher.seen_ago < 90 ? `${d.watcher.seen_ago}s` : `${Math.round(d.watcher.seen_ago / 60)} min`}` : "all quiet"));
       if (d.room) rows.push(nowRow("The room", d.room));
-      if (d.gps) rows.push(nowRow("GPS", !d.gps.connected ? "no receiver plugged in" : d.gps.fix === "none" ? "looking for satellites"
-        : `${d.gps.sats || "?"} satellites` + (d.gps.place ? ` · ${d.gps.place}` : "")));
       if (d.tv) rows.push(nowRow("TV", d.tv));
       for (const p of d.mining || []) rows.push(nowRow(p.symbol, p.hashrate > 0 ? `${p.hashrate_text} · ${p.workers} worker${p.workers === 1 ? "" : "s"}${p.alert ? " · under the line" : ""}` : "nothing mining", p.alert || p.hashrate <= 0 ? "warn" : ""));
-      if (d.holdings) rows.push(nowRow("Your crypto", fmtMoney(d.holdings.total) + (d.holdings.day_pct != null ? ` · ${fmtPct(d.holdings.day_pct)} today` : "")
+      if (d.holdings) rows.push(nowRow(d.holdings.whose || "Your crypto", fmtMoney(d.holdings.total) + (d.holdings.day_pct != null ? ` · ${fmtPct(d.holdings.day_pct)} today` : "")
         + (d.holdings.move ? ` · a ${d.holdings.move}` : ""), d.holdings.move === "crash" ? "warn" : ""));
+      if (d.reminder) rows.push(nowRow("Reminder", d.reminder.words + (d.reminder.more ? ` · +${d.reminder.more} more` : "")));
+      if (d.rooms) rows.push(nowRow(d.rooms.count === 1 ? "Other room" : "Other rooms", d.rooms.labels.map((l, i) => l + (d.rooms.showing[i] ? ` (${d.rooms.showing[i]})` : "")).join(", ")
+        + (d.rooms.count > d.rooms.labels.length ? ` +${d.rooms.count - d.rooms.labels.length}` : "") + " · the same bot, there too", "long"));
+      if (d.pitato) rows.push(nowRow(d.pitato.excited ? "Pietato ★" : "Pietato", `${d.pitato.name}${d.pitato.here ? " · on this Pi" : ""}${d.pitato.more ? ` +${d.pitato.more}` : ""} · ${d.pitato.ago < 90 ? "just now" : d.pitato.ago < 5400 ? `${Math.round(d.pitato.ago / 60)} min ago` : `${Math.round(d.pitato.ago / 3600)} h ago`}`
+        + (d.pitato.activity ? ` · ${d.pitato.activity}` : d.pitato.asks ? " · asks for the weather and prices" : "") + (d.pitato.cameras && d.pitato.cameras.length ? ` · camera ${d.pitato.cameras.join(", ")}` : ""), "long" + (d.pitato.excited ? " good" : "")));
+      if (d.snake) rows.push(nowRow("Snake", d.snake.error ? d.snake.error : `score ${d.snake.score}` + (d.snake.best ? ` · best ${d.snake.best}` : "") + ` · ${d.snake.model}${d.snake.bored ? " · bored" : ""}`, d.snake.error ? "warn" : ""));
       if (d.event) rows.push(nowRow("Seen", `${d.event.text} · ${d.event.ago < 90 ? `${d.event.ago}s` : d.event.ago < 5400 ? `${Math.round(d.event.ago / 60)} min` : `${Math.round(d.event.ago / 3600)} h`} ago`, "long"));
       if (d.agent) rows.push(nowRow("Agent", d.agent.busy ? "checking now…" : d.agent.error ? d.agent.error : d.agent.thought
         ? `${d.agent.thought}${d.agent.ago != null ? ` · ${Math.round(d.agent.ago / 60)} min ago` : ""}` : "hasn't checked yet", "long"));
@@ -3616,7 +4043,7 @@
   });
   $("#btn-rotate").addEventListener("click", async () => {
     // an e-ink turns round (0/180); a colour panel as the main screen has four ways (the LCD's landscape too)
-    const step = state.panel.colour ? 90 : 180;
+    const step = state.panel.colour && !/gpicase/.test(state.panel.driver || "") ? 90 : 180;   // (the GPi Case's screen: upside down at most)
     const next = ((Number(getSetting("display.rotation")) || 0) + step) % 360;
     try {
       await api("/settings", { method: "PUT", body: { display: { rotation: next } } });
@@ -3642,8 +4069,8 @@
   renderTheme();
 
   pollStatus().then(() => {
-    // the tab for what's on the panel; the GPS screen's settings live under Weather
-    const tab = Object.keys(TAB_MODE).find((t) => TAB_MODE[t] === state.mode) || (state.mode === "gps" ? "weather" : "clock");
+    // the tab for what's on the panel
+    const tab = Object.keys(TAB_MODE).find((t) => TAB_MODE[t] === state.mode) || "clock";
     showTab(tab);
   });
   setInterval(pollStatus, 10000);
@@ -3652,5 +4079,7 @@
   setInterval(pollSystem, 10000);
   pollNow();
   setInterval(pollNow, NOW_EVERY);
+  loadPitatoScreens();
+  setInterval(loadPitatoScreens, 20000);
   setInterval(() => { if (state.tab === "read" && ((reading && reading.book && !reading.ready) || jobsWere)) loadBooks(); }, 1500);
 })();

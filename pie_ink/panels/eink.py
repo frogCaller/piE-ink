@@ -66,7 +66,14 @@ class EInk(Panel):
                 raise RuntimeError("GPIO backend can't drive this Pi. Install python3-lgpio "
                                    "(sudo apt install python3-lgpio) and restart pie-ink.") from e
             raise
-        self._init()
+        try:
+            self._init()
+        except OSError as e:                          # /dev/spidev0.0 missing (SPI off), or not ours to open
+            from .. import gpio, settings
+            why = (isinstance(e, FileNotFoundError) and settings.gpi_trouble()) or gpio.spi_problem(e)
+            if why:
+                raise RuntimeError(why) from e
+            raise
 
     def _release(self):
         """Let go of the SPI bus and the GPIO lines, so nothing is left claimed

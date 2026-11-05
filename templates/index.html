@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>PiE-ink</title>
-<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/static/app.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23272c31'/%3E%3Crect x='6' y='9' width='20' height='14' rx='1.5' fill='%23f6f7f4'/%3E%3C/svg%3E">
 </head>
@@ -36,19 +35,18 @@
       </div>
     </div>
 
-    <div class="action-row" id="action-home"><button class="primary action" id="action">Show clock</button></div>
+    <div class="action-row" id="action-home"><button class="primary action" id="action">Show clock</button><button class="pitato-action" id="action-pitato" type="button" hidden><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="10.5" rx="2"/><path d="M7 17.5h6M10 14.5v3"/></svg><span>On the Pietato</span></button></div>
   </div>
 
   <nav class="tabs" id="tabs" aria-label="Modes">
     <button data-tab="clock" data-mode="clock" class="active" title="Clock" aria-label="Clock"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4l2.5 2"/></svg><span>Clock</span></button>
     <button data-tab="weather" data-mode="weather" title="Weather" aria-label="Weather"><svg viewBox="0 0 20 20"><path d="M6 15h9a3 3 0 0 0 .5-6 4.5 4.5 0 0 0-8.7-1A3.5 3.5 0 0 0 6 15z"/></svg><span>Weather</span></button>
-    <button data-tab="map" data-mode="map" title="Map" aria-label="Map"><svg viewBox="0 0 20 20"><path d="M10 18s-5.5-5.2-5.5-9.5a5.5 5.5 0 0 1 11 0C15.5 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg><span>Map</span></button>
     <button data-tab="message" data-mode="message" title="Message" aria-label="Message"><svg viewBox="0 0 20 20"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg><span>Message</span></button>
     <button data-tab="draw" data-mode="image" title="Draw" aria-label="Draw"><svg viewBox="0 0 20 20"><path d="M3 17l1-4L14 3l3 3-10 10-4 1zM12 5l3 3"/></svg><span>Draw</span></button>
     <button data-tab="read" data-mode="reader" title="Read" aria-label="Read"><svg viewBox="0 0 20 20"><path d="M3 4h5.5a2 2 0 0 1 2 2v10a2 2 0 0 0-2-2H3zM17 4h-5.5a2 2 0 0 0-2 2v10a2 2 0 0 1 2-2H17z"/></svg><span>Read</span></button>
     <button data-tab="camera" data-mode="camera" title="Camera" aria-label="Camera"><svg viewBox="0 0 20 20"><path d="M3 7h3l1.5-2h5L14 7h3v9H3z"/><circle cx="10" cy="11.5" r="2.8"/></svg><span>Camera</span></button>
     <button data-tab="music" data-mode="music" title="Music" aria-label="Music"><svg viewBox="0 0 20 20"><path d="M7 15V4l9-1.5V13"/><circle cx="5" cy="15.5" r="2.2"/><circle cx="14" cy="13.5" r="2.2"/></svg><span>Music</span></button>
-    <button data-tab="crypto" data-mode="crypto" title="Crypto" aria-label="Crypto"><svg viewBox="0 0 20 20"><path d="M3 14l4-5 3 3 4-6 3 4"/><path d="M3 17h14"/></svg><span>Crypto</span></button>
+    <button data-tab="crypto" data-mode="crypto" title="Finance" aria-label="Finance"><svg viewBox="0 0 20 20"><path d="M3 14l4-5 3 3 4-6 3 4"/><path d="M3 17h14"/></svg><span>Finance</span></button>
     <button data-tab="system" data-mode="system" title="System" aria-label="System"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2"/><rect x="7" y="7" width="6" height="6"/><path d="M8 3V1M12 3V1M8 19v-2M12 19v-2M3 8H1M3 12H1M19 8h-2M19 12h-2"/></svg><span>System</span></button>
   </nav>
 </div>
@@ -105,7 +103,7 @@
             <input type="search" id="wx-search" placeholder="Found by itself — or type a town…" autocomplete="off">
             <ul id="wx-results" class="results" hidden></ul>
           </div>
-          <button type="button" class="ghost" id="wx-locate" title="Where the GPS says, or, without a fix, where the Pi's internet address says">Find me</button>
+          <button type="button" class="ghost" id="wx-locate" title="Where the Pi's internet address says it is">Find me</button>
         </div>
       </label>
       <div class="field-row">
@@ -120,79 +118,6 @@
           <input type="range" min="5" max="60" step="5" data-setting="weather.refresh_minutes">
         </label>
       </div>
-    </div>
-    <div class="group">
-      <span class="group-label">GPS receiver</span>
-      <p class="hint">A USB GPS plugged into the Pi — a u-blox 7 dongle, or anything that talks NMEA — is used the moment
-      it's plugged in. It needs a view of the sky (a window sill will do) and a minute or two to find satellites from cold.</p>
-      <div class="field-row">
-        <label class="field">
-          <span>Use it</span>
-          <div class="segmented" data-setting="gps.enabled">
-            <button data-value="auto" title="Whenever a receiver is plugged in">Auto</button><button data-value="on" title="And say so when there isn't one">On</button><button data-value="off">Off</button>
-          </div>
-        </label>
-      </div>
-      <div class="switches">
-        <label class="switch"><input type="checkbox" data-setting="gps.set_weather"><span>Move the weather to wherever it is</span></label>
-        <label class="switch"><input type="checkbox" data-setting="journey.enabled"><span>Keep a journey log (the Map tab)</span></label>
-      </div>
-      <div class="draw-actions">
-        <span class="hint" id="gps-note">Off.</span>
-        <span class="spacer"></span>
-        <button class="ghost" id="gps-why" title="Check the USB bus, the serial ports, gpsd and ModemManager, listen to the receiver, and say what is wrong">Why not working?</button>
-        <button class="ghost" id="gps-show">Show the GPS screen</button>
-      </div>
-      <pre class="log" id="gps-probe" hidden></pre>
-    </div>
-  </section>
-
-  <section class="tab card" data-tab="map" hidden>
-    <header class="card-head">
-      <svg viewBox="0 0 20 20"><path d="M10 18s-5.5-5.2-5.5-9.5a5.5 5.5 0 0 1 11 0C15.5 12.8 10 18 10 18z"/><circle cx="10" cy="8.5" r="2"/></svg>
-      <div><h2>Map</h2></div>
-    </header>
-    <div class="group">
-      <div class="map-wrap">
-        <div id="map" class="map"></div>
-        <button class="map-btn" id="map-centre" title="Centre on the Pi" aria-label="Centre on the Pi"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4.5"/><path d="M10 2v3.5M10 14.5V18M2 10h3.5M14.5 10H18"/></svg></button>
-        <span class="map-badge" id="map-badge">…</span>
-      </div>
-      <dl class="stats map-stats" id="map-stats"></dl>
-      <p class="hint" id="map-note"></p>
-      <div class="draw-actions journey-row">
-        <label class="switch"><input type="checkbox" id="journey-show" checked><span>Journey</span></label>
-        <select class="compact-select" id="journey-day" title="Which day"></select>
-        <span class="spacer"></span>
-        <button class="ghost" id="journey-forget" title="Delete this day's track">Forget this day</button>
-      </div>
-      <p class="hint" id="journey-note"></p>
-    </div>
-    <div class="group">
-      <span class="group-label">On the panel</span>
-      <div class="field-row">
-        <label class="field">
-          <span>Zoom <output id="map-zoom-out"></output></span>
-          <input type="range" min="8" max="18" data-setting="map.zoom">
-        </label>
-        <label class="field">
-          <span>Style</span>
-          <div class="segmented" data-setting="map.style">
-            <button data-value="lines">Lines</button><button data-value="shaded">Shaded</button>
-          </div>
-        </label>
-      </div>
-      <div class="switches">
-        <label class="switch"><input type="checkbox" data-setting="map.friends"><span>Friends' Pis on it</span></label>
-        <label class="switch"><input type="checkbox" data-setting="map.journey"><span>Today's trail on it</span></label>
-      </div>
-      <div class="draw-actions">
-        <span class="hint" id="map-cache">…</span>
-        <span class="spacer"></span>
-        <button class="ghost" id="map-prefetch">Fetch the tiles now</button>
-      </div>
-      <p class="hint">Map data © OpenStreetMap contributors. The Pi keeps the tiles it has fetched for a week, so a place it
-      has shown stays on the panel without the network.</p>
     </div>
   </section>
 
@@ -210,11 +135,11 @@
         <button class="secondary" id="mu-toggle">Play</button>
         <button class="ghost icon" id="mu-next" aria-label="Next"><svg viewBox="0 0 20 20"><path d="M5 4v12l8-6zM15 4v12"/></svg></button>
         <button class="ghost icon" id="mu-stop" aria-label="Stop"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1.5"/></svg></button>
+        <label class="field volume">
+          <span>Volume <output id="mu-volume-out"></output></span>
+          <input type="range" min="0" max="100" step="5" id="mu-volume">
+        </label>
       </div>
-      <label class="field">
-        <span>Volume <output id="mu-volume-out"></output></span>
-        <input type="range" min="0" max="100" step="5" id="mu-volume">
-      </label>
       <div class="switches">
         <label class="switch"><input type="checkbox" data-setting="music.shuffle"><span>Shuffle</span></label>
         <label class="switch"><input type="checkbox" data-setting="music.repeat"><span>Repeat</span></label>
@@ -468,13 +393,13 @@
     </header>
     <div class="group">
       <div class="cam-wrap" id="cam-wrap" data-rot="0">
-        <img id="cam-live" alt="Camera" width="480" height="360">
+        <img id="cam-live" alt="Camera" width="480" height="360" draggable="false">
         <span class="cam-badge" id="cam-badge">connecting…</span>
+        <span class="cam-badge cam-zoom" id="cam-zoom" hidden></span>
         <span class="cam-shape" id="cam-shape"></span>
         <button class="cam-rotate cam-full" id="cam-full" aria-label="Full screen" title="The live view full screen (Esc to leave)"><svg viewBox="0 0 20 20"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg></button>
         <button class="cam-rotate" id="cam-rotate" aria-label="Rotate this view" title="Rotate this view only (not the screen)"><svg viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.4-4.1L16 7.5"/><path d="M16 3.5v4h-4"/><path d="M16 10a6 6 0 0 1-10.4 4.1L4 12.5"/><path d="M4 16.5v-4h4"/></svg></button>
       </div>
-      <p class="hint">Framed like the screen (same shape, Fill/Whole and mirror). The round button turns this view only; "Rotate 90°" below turns the screen.</p>
       <div class="shoot" id="shoot">
         <div class="photo-filters" id="photo-filters" role="radiogroup" aria-label="Filter"></div>
         <div class="shoot-row">
@@ -482,33 +407,23 @@
             <option value="0">Now</option><option value="3">In 3 s</option><option value="10">In 10 s</option>
           </select>
           <button class="primary shutter" id="photo-take"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7h3l1.5-2h5L14 7h3v9H3z"/><circle cx="10" cy="11.5" r="2.8"/></svg><span id="photo-take-label">Take a picture</span></button>
+          <div class="ptz" id="ptz" hidden>
+            <button class="ghost" id="ptz-center" title="Point straight ahead (or press 0)">Center</button>
+            <button class="ghost" id="ptz-home" title="Go to the saved home position">Home</button>
+            <button class="secondary" id="ptz-look" title="Turn left, ahead and right, and say what is there">Look around</button>
+          </div>
+        </div>
+        <div class="ptz-note" id="ptz-note" hidden>
+          <label class="switch" id="ptz-follow-row" hidden title="The camera turns after you by itself. Dragging the picture takes over."><input type="checkbox" id="ptz-follow"><span>Follow me</span></label>
+          <span class="hint" id="ptz-pos"></span><span class="hint" id="ptz-pad-tag" hidden>Game controller connected</span>
         </div>
         <div class="photo-strip" id="photo-strip" hidden></div>
-      </div>
-      <div class="ptz" id="ptz" hidden>
-        <div class="ptz-stick" id="ptz-stick" tabindex="0" aria-label="Turn the camera: drag the stick, or use the arrow keys">
-          <svg class="ptz-marks" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 8l-5.5 6.5h11zM50 92l-5.5-6.5h11zM8 50l6.5-5.5v11zM92 50l-6.5-5.5v11z"/><circle cx="50" cy="50" r="27"/></svg>
-          <span class="ptz-knob" id="ptz-knob"></span>
-        </div>
-        <div class="ptz-side">
-          <label class="switch" id="ptz-follow-row" hidden title="The camera turns after you by itself. The stick rests while it does."><input type="checkbox" id="ptz-follow"><span>Follow me</span></label>
-          <label class="field" id="ptz-zoom-field">
-            <span>Zoom <output id="ptz-zoom-out">0%</output></span>
-            <input type="range" id="ptz-zoom" min="0" max="100" step="1" value="0">
-          </label>
-          <div class="ptz-buttons">
-            <button class="ghost" id="ptz-center" title="Point straight ahead">Center</button>
-            <button class="ghost" id="ptz-home" title="Go to the saved home position">Home</button>
-          </div>
-          <button class="secondary" id="ptz-look" title="Turn left, ahead and right, and say what is there">Look around</button>
-          <span class="hint" id="ptz-pos"></span>
-        </div>
       </div>
       <details class="more" id="ptz-more" hidden>
         <summary>Turning</summary>
         <div class="more-body">
           <div class="field-row">
-            <label class="field"><span>Stick speed <output id="ptz-speed-out"></output></span>
+            <label class="field" title="How fast the arrow keys and a game controller turn it"><span>Keys turn at <output id="ptz-speed-out"></output></span>
               <input type="range" min="10" max="120" step="5" data-setting="ptz.speed"></label>
             <label class="field"><span>Look around turns <output id="ptz-sweep-out"></output></span>
               <input type="range" min="30" max="120" step="5" data-setting="ptz.sweep_degrees"></label>
@@ -529,11 +444,33 @@
             <span class="spacer"></span>
             <button class="ghost" id="ptz-save-home" title="Remember where it points now as home">Make this home</button>
           </div>
-          <p class="hint">Arrow keys turn it too, + and − zoom, 0 centres. The bot turns it when you say "look left", "look around",
-          "zoom in" or "follow me". Center, Home and "look left" stop the following.</p>
+          <p class="hint">Drag the picture to turn it; the mouse wheel or a pinch zooms. Arrow keys turn it too, + and − zoom, 0 centres. Or say "look left", "look around", "zoom in", "follow me".</p>
+          <div class="switches">
+            <label class="switch" title="A controller plugged into this computer steers the camera while this tab is open. Kept per browser."><input type="checkbox" id="ptz-pad" checked><span>Game controller on this computer</span></label>
+          </div>
+          <p class="hint" id="ptz-pad-note" hidden></p>
         </div>
       </details>
-      <button class="ghost icon wide" id="friends-btn" title="Show the camera feeds of other PiE-inks on your network"><svg viewBox="0 0 20 20"><rect x="2" y="4" width="7" height="5" rx="1"/><rect x="11" y="4" width="7" height="5" rx="1"/><rect x="2" y="11" width="7" height="5" rx="1"/><rect x="11" y="11" width="7" height="5" rx="1"/></svg> Friends' cameras <output id="friends-count"></output></button>
+      <details class="more" id="pet-more" hidden>
+        <summary>Yes and no, with its head</summary>
+        <div class="more-body">
+          <p class="hint">Ask it a yes-or-no question — "are you happy?" — and it nods or shakes its head. A decision model on the
+          bot's Ollama decides: <code>ollama pull tev1</code> there.</p>
+          <div class="field-row tight">
+            <label class="field"><span>Model</span><select data-setting="pet.model" id="pet-model" class="words"></select></label>
+            <label class="field" title="Nods a second: quicker is keener, slower more thoughtful"><span>Tempo <output id="pet-tempo-out"></output></span>
+              <input type="range" min="0.6" max="2.6" step="0.1" data-setting="pet.tempo"></label>
+            <div class="switches"><label class="switch"><input type="checkbox" data-setting="pet.enabled"><span>On</span></label></div>
+          </div>
+          <div class="draw-actions">
+            <span class="hint" id="pet-status">—</span>
+            <span class="spacer"></span>
+            <button class="ghost" data-gesture="nod" title="See a nod">Nod</button>
+            <button class="ghost" data-gesture="shake" title="See a shake of the head">Shake</button>
+          </div>
+        </div>
+      </details>
+      <button class="ghost icon wide" id="friends-btn" title="Show the cameras in your other rooms (other PiE-inks of yours) and Pietato cameras on your network"><svg viewBox="0 0 20 20"><rect x="2" y="4" width="7" height="5" rx="1"/><rect x="11" y="4" width="7" height="5" rx="1"/><rect x="2" y="11" width="7" height="5" rx="1"/><rect x="11" y="11" width="7" height="5" rx="1"/></svg> Other cameras <output id="friends-count"></output></button>
       <div class="friends-grid" id="friends-grid" hidden></div>
     </div>
     <div class="group" id="buddy-group">
@@ -549,7 +486,7 @@
         </div>
       </div>
       <div class="draw-actions">
-        <span class="hint" id="buddy-note">It looks around by itself, says hi when it sees someone, and is surprised by what's new. Settings → Friend for more.</span>
+        <span class="hint" id="buddy-note">Looks around by itself, says hi, is surprised by what's new. Settings → Friend.</span>
         <span class="spacer"></span>
         <button class="ghost" id="buddy-show" title="Put its face on the screen">Show its face</button>
       </div>
@@ -561,7 +498,7 @@
       </div>
       <ul class="events" id="events-list"><li class="empty">Nothing yet.</li></ul>
       <div class="draw-actions">
-        <span class="hint">What changes in front of the camera, as it happens: people, packages, the door, pets. Turn it on under Settings → Watching.</span>
+        <span class="hint">People, packages, the door, pets — as they happen. Settings → Watching.</span>
         <span class="spacer"></span>
         <button class="ghost" id="events-look" title="Take a look right now">Look now</button>
         <button class="ghost" id="events-clear">Clear</button>
@@ -588,39 +525,52 @@
         </label>
         <label class="field">
           <span>Camera</span>
-          <div class="key-row">
+          <div class="key-row nowrap">
             <select id="cam-pick" data-setting="camera.source">
               <option value="auto">Auto</option>
             </select>
             <button class="ghost" id="cam-next" title="Switch to the next camera">Next</button>
-            <button class="ghost" id="cam-why" title="Check the USB bus, the video nodes and the driver, and say what is wrong">Why not found?</button>
           </div>
         </label>
+      </div>
+      <div class="field-row" id="cam-lenses-row" hidden>
+        <label class="field" title="This camera sends its two lenses' views side by side: show both, or one of them">
+          <span>Two lenses</span>
+          <div class="segmented" data-setting="camera.lens">
+            <button data-value="both">Both</button><button data-value="left">Left</button><button data-value="right">Right</button>
+          </div>
+        </label>
+      </div>
+      <div class="draw-actions">
+        <span class="hint" id="cam-why-note">A camera that isn't found: check the USB bus, the video nodes and the driver.</span>
+        <span class="spacer"></span>
+        <button class="ghost" id="cam-why">Why not found?</button>
       </div>
       <pre class="log" id="cam-probe" hidden></pre>
       <div class="switches">
         <label class="switch"><input type="checkbox" data-setting="camera.dither"><span>Dither</span></label>
         <label class="switch"><input type="checkbox" data-setting="camera.auto_contrast"><span>Auto contrast</span></label>
         <label class="switch"><input type="checkbox" data-setting="camera.mirror"><span>Mirror</span></label>
+        <label class="switch" id="cam-swap-row" hidden title="Each view on the other side — a two-lens camera mounted upside down, with the picture turned 180°, needs this too"><input type="checkbox" data-setting="camera.swap_lenses"><span>Swap the two views</span></label>
       </div>
     </div>
   </section>
 
 
-  <!-- Crypto -->
+  <!-- Finance: coins and shares (the section and the mode keep the name "crypto") -->
   <section class="tab card" data-tab="crypto" hidden>
     <header class="card-head">
       <svg viewBox="0 0 20 20"><path d="M3 14l4-5 3 3 4-6 3 4"/><path d="M3 17h14"/></svg>
-      <div><h2>Crypto</h2></div>
+      <div><h2>Finance</h2></div>
     </header>
     <div class="group">
       <div class="field-row">
         <label class="field">
           <span>Name on screen</span>
-          <input type="text" data-setting="crypto.username" maxlength="14">
+          <input type="text" data-setting="crypto.username" maxlength="14" id="crypto-username">
         </label>
         <label class="field">
-          <span>Seconds per coin <output id="crypto-coin-out"></output></span>
+          <span>Seconds each <output id="crypto-coin-out"></output></span>
           <input type="range" min="20" max="600" step="10" data-setting="crypto.coin_seconds">
         </label>
       </div>
@@ -640,9 +590,9 @@
       </div>
     </div>
     <div class="group watch">
-      <span class="group-label">Coins</span>
+      <span class="group-label">Coins and shares</span>
       <div class="search-wrap">
-        <input type="search" id="watch-search" placeholder="Add a coin — bitcoin, DOGE, solana…" autocomplete="off">
+        <input type="search" id="watch-search" placeholder="Add a coin or a share — bitcoin, DOGE, AAPL, Tesla…" autocomplete="off">
         <ul id="watch-results" class="results" hidden></ul>
       </div>
       <p class="hint" id="watch-hint"></p>
@@ -653,8 +603,7 @@
         <span class="group-label">What you hold</span>
         <label class="switch"><input type="checkbox" data-setting="holdings.show"><span>In the rotation</span></label>
       </div>
-      <p class="hint">Put how much of each coin you hold under it in the list above. What it all adds up to, from the same prices
-      — with what your miners have at their pools — and how that has moved. The bot knows the figure too ("how's my crypto?").</p>
+      <p class="hint">Type what you hold under each coin and share above, and this adds it up — your miners' balances too. Ask the bot "how's my crypto?" or "how are my stocks?".</p>
       <div class="worth" id="worth" hidden>
         <div class="worth-top">
           <b id="worth-total">—</b>
@@ -688,16 +637,16 @@
         <button class="ghost holdings-try" data-kind="rally">A rally</button>
       </div>
     </div>
-    <div class="group">
+    <div class="group" id="mining-group">
       <details class="more" id="mining-more">
         <summary>Mining <span class="hint" id="mining-sum"></span></summary>
         <div class="more-body">
+          <div class="pool" data-pool="duco">
           <div class="group-row">
             <span class="group-label">Duino-Coin</span>
             <label class="switch"><input type="checkbox" data-setting="duco.enabled"><span>In the rotation</span></label>
           </div>
-          <p class="hint">Your miners as a coin among the coins: balance, hashrate, what it earns a day, each worker — on the e-ink,
-          the LCD, and the bot's mind. And a word (your phone, the bot) when the hashrate falls under a line you set.</p>
+          <p class="hint">Your miners as a coin in the rotation — balance, hashrate, each worker — and a word when the hashrate drops under your line.</p>
           <div class="field-row">
             <label class="field">
               <span>Username</span>
@@ -721,13 +670,14 @@
           </div>
           <p class="hint mining-note" data-pool="duco">Off.</p>
           <ul class="events mining-miners" data-pool="duco" hidden></ul>
+          </div>
           <div class="pool-split"></div>
+          <div class="pool" data-pool="verus">
           <div class="group-row">
             <span class="group-label">Verus</span>
             <label class="switch"><input type="checkbox" data-setting="verus.enabled"><span>In the rotation</span></label>
           </div>
-          <p class="hint">The same for Verus mined on luckpool.net: the wallet your miners pay into, its unpaid balance and what has
-          been paid out, the rate in sols, the luck, each worker. The price comes from CoinGecko.</p>
+          <p class="hint">The same for Verus on luckpool.net: the wallet your miners pay into, its balance, the rate, each worker.</p>
           <div class="field-row">
             <label class="field">
               <span>Wallet address</span>
@@ -751,6 +701,7 @@
           </div>
           <p class="hint mining-note" data-pool="verus">Off.</p>
           <ul class="events mining-miners" data-pool="verus" hidden></ul>
+          </div>
         </div>
       </details>
     </div>
@@ -772,7 +723,7 @@
     </dl>
 
     <div class="group" id="friends-group" hidden>
-      <span class="group-label">Other PiE-inks on your network</span>
+      <span class="group-label" id="friends-label">Your other rooms</span>
       <ul class="book-list" id="friends-list"></ul>
     </div>
 
@@ -837,7 +788,7 @@
         </div>
       </label>
       <div class="key-row" id="llm-host-row">
-        <input type="text" data-setting="llm.host" placeholder="http://192.168.0.179:11434" autocomplete="off" spellcheck="false">
+        <input type="text" data-setting="llm.host" placeholder="http://192.168.1.50:11434" autocomplete="off" spellcheck="false">
         <button class="ghost" id="llm-test">Check</button>
       </div>
       <div class="field-row">
@@ -864,6 +815,23 @@
       <div class="draw-actions">
         <button class="ghost icon" id="llm-speak" hidden aria-label="Say it again" title="Say it again"><svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5"/><path d="M16.5 5a6.5 6.5 0 0 1 0 10"/></svg></button>
       </div>
+    </div>
+    <div class="group">
+      <span class="group-label">It remembers</span>
+      <div class="key-row">
+        <input type="text" id="note-text" placeholder="the bins go out on Tuesday" autocomplete="off" maxlength="200">
+        <button class="ghost" id="note-add">Remember</button>
+      </div>
+      <ul class="book-list results-list" id="note-list"></ul>
+    </div>
+    <div class="group">
+      <span class="group-label">Reminders</span>
+      <div class="key-row">
+        <input type="text" id="reminder-text" placeholder="in 20 minutes check the oven" autocomplete="off" maxlength="200">
+        <button class="ghost" id="reminder-add">Set</button>
+      </div>
+      <ul class="book-list results-list" id="reminder-list"></ul>
+      <p class="hint" id="reminder-note">Or just say it: "remind me at 5 to call mum", "set a timer for 10 minutes", "wake me at 7".</p>
     </div>
         </div>
   <div class="sheet-foot">
@@ -932,9 +900,10 @@
         <label class="switch"><input type="checkbox" id="group-indicator"><span>Little mark on the panel while they talk</span></label>
       </div>
       <button class="ghost" id="group-to-screen">Show the conversation on the screen now</button>
-      <p class="hint" id="group-note">Messages go straight to the other Pis on your network. "Their bot" sends
-      it to the other Pi's AI, which answers back — and the two bots carry on until you press
-      Stop the AIs, which ends it on every Pi.</p>
+      <p class="hint" id="group-note">Messages go straight to the other Pis: your other rooms (other PiE-inks of
+      yours — the same bot lives there), and friends' Pis added by address. "Their bot" is for a friend's Pi: it
+      goes to that Pi's AI, which answers back — and the two bots carry on until you press Stop the AIs, which
+      ends it on every Pi.</p>
     </div>
   </div>
   <div class="sheet-foot">
@@ -965,7 +934,7 @@
     <div class="pane" data-pane="you" hidden>
     <div class="group">
       <div class="field-row">
-        <label class="field"><span>Name</span><input type="text" data-setting="me.name" placeholder="coolbeans" autocomplete="off"></label>
+        <label class="field"><span>Name</span><input type="text" data-setting="me.name" placeholder="your name" autocomplete="off"></label>
         <label class="field"><span>Job title</span><input type="text" data-setting="me.job_title" placeholder="Engineer" autocomplete="off"></label>
       </div>
       <label class="field">
@@ -973,13 +942,13 @@
         <input type="text" data-setting="me.location" placeholder="workshop, upstairs, kitchen…" autocomplete="off" maxlength="40">
       </label>
       <div class="field-row">
-        <label class="field"><span>Yearly income</span><input type="number" min="0" step="1000" data-setting="finance.salary" placeholder="0" inputmode="numeric"></label>
-        <label class="field"><span>Currency</span><input type="text" data-setting="finance.currency" maxlength="3" placeholder="$" style="width:72px"></label>
+        <label class="field"><span>Yearly income</span><input type="number" min="0" step="1000" data-setting="earnings.salary" placeholder="0" inputmode="numeric"></label>
+        <label class="field"><span>Currency</span><input type="text" data-setting="earnings.currency" maxlength="3" placeholder="$" style="width:72px"></label>
       </div>
       <div class="field-row">
         <label class="field">
           <span>Paid</span>
-          <select data-setting="finance.pay_periods">
+          <select data-setting="earnings.pay_periods">
             <option value="52">Weekly</option><option value="26">Every 2 weeks</option>
             <option value="24">Twice a month</option><option value="12">Monthly</option>
           </select>
@@ -1024,8 +993,16 @@
         <span class="group-label">Schedule</span>
         <button class="ghost" id="me-add-block">+ Add block</button>
       </div>
-      <p class="hint">Your everyday blocks. They drive what the Me screen says you're up to, and "paid" ones earn on the Finance screen.</p>
+      <p class="hint">Your everyday blocks. They drive what the Me screen says you're up to, and "paid" ones earn on the Earnings screen.</p>
       <div class="blocks" id="me-blocks"></div>
+    </div>
+    <div class="group">
+      <span class="group-label">Mining</span>
+      <div class="switches">
+        <label class="switch"><input type="checkbox" data-setting="duco.show"><span>I mine Duino-Coin</span></label>
+        <label class="switch"><input type="checkbox" data-setting="verus.show"><span>I mine Verus</span></label>
+      </div>
+      <p class="hint">Off, and that pool's part of the Finance tab is out of the way.</p>
     </div>
     </div>
     <div class="pane" data-pane="screen">
@@ -1042,6 +1019,20 @@
         </label>
       </div>
       <p class="hint warn" id="panel-note" hidden></p>
+      <div class="field-row" id="screens-row">
+        <div class="field">
+          <span>Screens</span>
+          <div class="segmented" id="screens-count" role="group" aria-label="How many screens">
+            <button type="button" data-value="1">Just the e-ink</button><button type="button" data-value="2">The e-ink and an LCD</button>
+          </div>
+        </div>
+        <div class="field" id="screens-model-field" hidden>
+          <span>The LCD</span>
+          <div class="segmented" id="lcd-model-pick" role="group" aria-label="Which LCD">
+            <button type="button" data-value="1.69">1.69″ · 240×280</button><button type="button" data-value="1.9">1.9″ · 170×320</button>
+          </div>
+        </div>
+      </div>
       <div class="field-row">
         <label class="field">
           <span>This page</span>
@@ -1063,6 +1054,12 @@
           <input type="range" min="5" max="100" step="5" data-setting="display.brightness"></label>
         <label class="field"><span>Accent</span><input type="color" data-setting="display.accent" class="colour"></label>
       </div>
+    </div>
+    <div class="group" id="gpi-group" hidden>
+      <span class="group-label">GPi Case 2W buttons</span>
+      <p class="hint">Each screen has its own, shown along the bottom of the case's screen. <b>L R</b> change the screen, <b>B</b> is home.</p>
+      <p class="hint" id="gpi-now"></p>
+      <p class="hint" id="gpi-note"></p>
     </div>
     <div class="group" id="whisplay-group" hidden>
       <span class="group-label">Whisplay HAT</span>
@@ -1091,8 +1088,9 @@
     </div>
     <div class="group" id="lcd-group">
       <span class="group-label">Second screen — a small colour LCD</span>
-      <p class="hint">A Waveshare 1.69&quot; (240×280) or 1.9&quot; (170×320) LCD can sit next to the e-ink: it shares the
-      SPI bus on the other chip-select, so neither screen waits on the other. Both wire the same way.</p>
+      <p class="hint">A Waveshare 1.69&quot; (240×280) or 1.9&quot; (170×320) LCD next to the e-ink: it shares the
+      SPI bus on the other chip-select, so neither screen waits on the other. Both wire the same way. It can show
+      any of the screens — each laid out again for its size, so it fills it — or the same as the e-ink.</p>
       <div class="switches">
         <label class="switch"><input type="checkbox" data-setting="lcd.enabled"><span>Use the second screen</span></label>
         <label class="switch"><input type="checkbox" data-setting="lcd.light_mode"><span>Light (black on white)</span></label>
@@ -1137,11 +1135,41 @@
           The <b>Test card</b> screen shows the glass at its finest.</p>
         </div>
       </details>
+      <details class="more" id="snake-more">
+        <summary>Snake (the bot plays)</summary>
+        <div class="more-body">
+          <p class="hint">A decision model on the bot's Ollama plays Snake on the LCD — the whole screen is the arena. Every few
+          hundred milliseconds it's asked which way to steer, with a line of facts about each heading; the snake keeps gliding
+          on its last answer meanwhile, so a late answer is the model's problem. Only decision models can answer: <code>ollama pull tev1</code>
+          on the bot's machine.</p>
+          <div class="field-row tight">
+            <label class="field"><span>Model</span><select data-setting="snake.model" id="snake-model" class="words"></select></label>
+            <label class="field"><span>Decides every <output id="snake-decide-out"></output></span>
+              <input type="range" min="120" max="900" step="20" data-setting="snake.decide_ms"></label>
+          </div>
+          <div class="field-row tight">
+            <label class="field"><span>Speed <output id="snake-speed-out"></output></span>
+              <input type="range" min="30" max="150" step="5" data-setting="snake.speed"></label>
+            <label class="field"><span>Plays when bored after <output id="snake-bored-out"></output></span>
+              <input type="range" min="0" max="120" step="5" data-setting="snake.bored_minutes"></label>
+          </div>
+          <div class="switches">
+            <label class="switch" title="A deadly or dead-end pick is swapped for the likeliest good heading. Off, the snake does what the model says and dies when it's wrong."><input type="checkbox" data-setting="snake.safety"><span>Safety net</span></label>
+          </div>
+          <div class="draw-actions">
+            <span class="hint" id="snake-status">—</span>
+            <span class="spacer"></span>
+            <button class="ghost" id="snake-play" title="Put Snake on the LCD now">Play now</button>
+          </div>
+          <p class="hint">Bored means nothing from you — no chat, voice, Telegram or taps on the page — for that long; the LCD switches to
+          Snake and back to what it showed the moment you do something. 0 leaves it to the dropdown above.</p>
+        </div>
+      </details>
       <p class="hint" id="lcd-note"></p>
     </div>
     <div class="group" id="keys-group" hidden>
       <span class="group-label" id="keys-label">Keys on the HAT</span>
-      <p class="hint">What each key does. "Prev / Next" turn pages in Read, step coins in Crypto, and fetch a new joke or fortune in Message. Any key wakes the screen when it's off.</p>
+      <p class="hint">What each key does. "Prev / Next" turn pages in Read, step coins and shares in Finance, and fetch a new joke or fortune in Message. Any key wakes the screen when it's off.</p>
       <div class="keys" id="keys">
         <label class="field"><span>KEY1</span><select data-setting="buttons.key1" class="key-select"></select><button class="ghost" data-key="1">Press</button></label>
         <label class="field"><span>KEY2</span><select data-setting="buttons.key2" class="key-select"></select><button class="ghost" data-key="2">Press</button></label>
@@ -1300,7 +1328,7 @@
           <span class="group-label">The agent</span>
           <label class="switch"><input type="checkbox" data-setting="agent.enabled"><span>On</span></label>
         </div>
-        <p class="hint">Every few minutes it takes in what the camera, the GPS, Home Assistant, the Pi and the other Pis show, thinks it
+        <p class="hint">Every few minutes it takes in what the camera, Home Assistant, the Pi and the other Pis show, thinks it
         over against your goals with the bot, and acts only in the ways you allow below. Each check goes in the journal.</p>
         <label class="field">
           <span>Goals, one per line</span>
@@ -1446,6 +1474,13 @@
         </div>
         <p class="hint">The remote entity is what channel digits, arrows and <i>press home</i> go through; power, volume,
         mute, channels by number and <i>open netflix</i> only need the TV itself. Commas separate the names.</p>
+        <div class="field-row tight">
+          <label class="field" title="Found in Home Assistant by itself; type one only if that stays empty"><span>Its MAC address <output id="home-mac-note"></output></span>
+            <input type="text" data-setting="home.tv_mac" id="home-mac" placeholder="found from Home Assistant" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="hint">A TV that's off has no network until it's woken, so Home Assistant's "on" often does nothing on its own:
+        <i>turn on the tv</i> also sends the wake-up from this Pi, to the MAC Home Assistant has for the TV. On a Samsung,
+        <b>Power On with Mobile</b> must be on (Settings → General → Network → Expert Settings).</p>
         <details class="more" id="home-try">
           <summary>Try it</summary>
           <div class="more-body">
@@ -1464,6 +1499,29 @@
             </form>
             <p class="hint" id="home-result"></p>
           </div>
+        </details>
+      </div>
+      <div class="group" id="gest-group">
+        <span class="group-label">Hand gestures</span>
+        <p class="hint">The camera watches for your hands: pinch your thumb and index finger and twist for the volume
+        (with your other hand open, for the lights' brightness), push a fist around for the arrows, tap it for OK,
+        both fists for the TV, both hands open for the lights.</p>
+        <div class="switches">
+          <label class="switch"><input type="checkbox" data-setting="gestures.enabled"><span>Use hand gestures</span></label>
+          <label class="switch"><input type="checkbox" data-setting="gestures.invert"><span>The knob turns the other way</span></label>
+        </div>
+        <p class="hint" id="gest-note">…</p>
+        <img id="gest-view" class="gest-view" alt="The camera, as the gestures see it" hidden>
+        <details class="more" id="gest-lights-more">
+          <summary>The lights</summary>
+          <div class="more-body">
+            <p class="hint" id="gest-lights-hint">None ticked: the lights in the TV's room.</p>
+            <div class="gest-lights" id="gest-lights"></div>
+          </div>
+        </details>
+        <details class="more" id="gest-map-more">
+          <summary>What each gesture does</summary>
+          <div class="more-body"><div class="gest-map" id="gest-map"></div></div>
         </details>
       </div>
     </div>
@@ -1506,7 +1564,7 @@
   <button type="button" class="chat-icon" id="bot-btn" aria-label="The bot" title="Set the bot up">
     <svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><circle cx="9" cy="13" r="1.4"/><circle cx="15" cy="13" r="1.4"/><path d="M12 4v3M8.5 19v1.5M15.5 19v1.5M2.5 12v3M21.5 12v3"/></svg>
   </button>
-  <input type="text" id="chat-input" placeholder="Say something to the bot…">
+  <input type="text" id="chat-input" placeholder="Talk to the bot…">
   <button type="button" class="chat-icon" id="chat-toggle" aria-label="Conversation" title="Conversation">
     <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
   </button>
@@ -1517,7 +1575,6 @@
 </aside>
 
 <div class="toast" id="toast" hidden></div>
-<script src="/static/vendor/leaflet/leaflet.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

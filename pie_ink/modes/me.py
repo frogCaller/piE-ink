@@ -9,9 +9,9 @@ from datetime import date, datetime
 
 import psutil
 
-from .. import coingecko, watchlist, weather
+from .. import watchlist, weather
 from ..text import font, text_width, wrap
-from .base import Mode
+from .base import Mode, prompt_name
 from .crypto import FACES, _cpu_temp
 from .system import icon as sys_icon
 from .weather import QUOTES as WX_QUOTES, icon as wx_icon
@@ -185,6 +185,7 @@ class MeMode(Mode):
     reacts to the weather, your coins and the time."""
     name = "me"
     label = "Me"
+    nudge = 0                     # facts stepped on by hand (the GPi Case's ◀ ▶)
 
     @property
     def interval(self):
@@ -196,9 +197,13 @@ class MeMode(Mode):
         return self.config.get("schedule", {})
 
     def _coin(self):
+        """The first thing on the Finance screen's list — a coin or a share — and its figures."""
         items = watchlist.visible()
         item = items[0] if items else {"id": "bitcoin", "symbol": "BTC"}
-        return item, coingecko.coin_data(item["id"], cached_only=True)
+        d = watchlist.data(item, cached_only=True)
+        if d and watchlist.kind(item) == "stock":
+            d = {**d, "kind": "stock"}
+        return item, d
 
     def _weather(self):
         w = self.config.get("weather", {})
@@ -394,6 +399,13 @@ class MeMode(Mode):
         return picks
 
     def _mood(self, activity, wx, coin_q, extra_notes=()):
+        try:
+            from .. import plugs
+            usb = plugs.PLUGS.showing()
+        except Exception:
+            usb = None
+        if usb:                                    # something just plugged in (or pulled out): that's the news
+            return usb["face"], [usb["note"]]
         score, notes = 0, list(extra_notes)
         hour = datetime.now().hour
         if wx:
@@ -411,12 +423,20 @@ class MeMode(Mode):
                 notes += ["Lovely out — a walk later?", "Sun's out"]
         if coin_q and coin_q.get("change", {}).get("24h") is not None:
             ch = coin_q["change"]["24h"]
+            what = "Shares" if coin_q.get("kind") == "stock" else "Coins"
             if ch >= 2:
                 score += 1
-                notes.append(f"Coins up {ch:+.1f}% today!")
+                notes.append(f"{what} up {ch:+.1f}% today!")
             elif ch <= -2:
                 score -= 1
-                notes.append(f"Coins down {ch:+.1f}%. Hold on.")
+                notes.append(f"{what} down {ch:+.1f}%. Hold on.")
+        try:
+            from .. import pitato
+            if pitato.PITATO.excited():                         # the handheld Pi just showed up
+                score += 1
+                notes.append("A Pietato is here!")
+        except Exception:
+            pass
         act = (activity or "").lower()
         if "sleep" in act or "bed" in act:
             return (FACES["sleep"] if int(time.time() // 3) % 2 else FACES["sleep2"]), ["Zzz", "Good night", "Rest up"]
@@ -487,9 +507,9 @@ class MeMode(Mode):
         d.line([(0, hdr), (f.width, hdr)], fill=fg, width=1)
 
         # the featured stat, big on the right; the rest in the column below it
-        turn = int(now_t // STAT_SECONDS)
+        turn = int(now_t // STAT_SECONDS) + MeMode.nudge
         window = [pool[(turn + i) % len(pool)] for i in range(6)] if pool else []
-        d.text((5, hdr + 1), f"{self.config.get('crypto', {}).get('username', 'pi')}>", font=f12, fill=fg)
+        d.text((5, hdr + 1), f"{prompt_name(self.config)}>", font=f12, fill=fg)
         if window:
             big = font(1, round(25 * T))
             unit_font = font(1, round(13 * T))

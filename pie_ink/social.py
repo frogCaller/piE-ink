@@ -127,12 +127,21 @@ def _post(peer, msg, timeout=8):
 
 
 def send(config, kind, text, to="all", image=None, thread=None, hops=0, from_ai=False, end=False):
-    """Deliver to one friend or all of them. Returns (delivered, problems)."""
+    """Deliver to one friend or all of them. Returns (delivered, problems). A line for "their bot"
+    goes to friends' Pis only: your other PiE-inks are rooms of the one bot's house, and it
+    doesn't chat with itself."""
     targets = everyone(config)
     if to != "all":
         targets = [p for p in targets if p["host"] == to]
         if not targets:
             return 0, [f"no friend called {to}"]
+    if kind == "ai":
+        from . import household
+        rooms = [p for p in targets if household.HOUSE.is_room(p["host"]) or household.HOUSE.is_room(p["url"])]
+        targets = [p for p in targets if p not in rooms]
+        if rooms and not targets:
+            return 0, ["that's your other room — the same bot lives there, so there's no other bot to ask; "
+                       "a friend's Pi added by address has one"]
     msg = _message(kind, text, to, thread=thread, hops=hops, image=image, from_ai=from_ai, end=end)
     if kind == "ai" and thread:
         _state["threads"][thread] = hops

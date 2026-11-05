@@ -6,11 +6,21 @@ the result; the web preview gets the full-size render, which is why it's
 sharp instead of a blown-up bitmap.
 """
 import functools
+import socket
 
 from PIL import Image, ImageDraw, ImageFont
 
 SCALE = 3
 DEFAULT_PANEL = {"width": 250, "height": 122, "kind": "eink"}
+
+
+def prompt_name(config, section="crypto"):
+    """The name in the prompt on the screens ("name>"): the one set under
+    Crypto → Name on screen, or the Pi's hostname until one is."""
+    name = (config.get(section, {}) or {}).get("username") or (config.get("crypto", {}) or {}).get("username")
+    if not name:
+        name = socket.gethostname().split(".")[0] or "pi"
+    return str(name)[:14]
 
 
 @functools.lru_cache(maxsize=128)

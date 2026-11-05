@@ -65,9 +65,12 @@ BOT_MOODS = {
     "thinking": ("(•_• )", "( •_•)"),
     "plain":   ("(•‿• )", "( •‿•)"),
     "surprised": ("(⊙o⊙ )", "( ⊙o⊙)"),
+    "excited": ("(★‿★ )", "( ★‿★)"),
 }
-# lines that come with their own mood: the little friend's hellos and surprises
-KIND_MOODS = {"buddy-happy": "happy", "buddy-surprised": "surprised"}
+# lines that come with their own mood: the little friend's hellos and surprises, a Pietato showing up,
+# something plugged into a USB port (a drive: starry-eyed; pulled out: sad; what's on the drive: pleased)
+KIND_MOODS = {"buddy-happy": "happy", "buddy-surprised": "surprised", "pitato": "excited", "reminder": "surprised", "room": "excited",
+              "usb": "surprised", "usb-drive": "excited", "usb-gone": "sorry", "usb-look": "happy", "gesture": "happy"}
 SAFE_FACE = ("(•‿• )", "( •‿•)")          # if a font can't draw the chosen one
 GOOD = ("glad", "lovely", "great", "nice", "good", "happy", "yes", "sure", "thanks", "thank",
         "wonderful", "excellent", "perfect", "enjoy", "fun", "delight", "warm", "sunny", "well",
@@ -138,6 +141,7 @@ class MessageMode(Mode):
         self._current = None
         self._spoken = None          # the last one it read out, so it doesn't repeat
         self._next_switch = 0
+        self._back = []              # the ones before, for "prev"
 
     def _load_jokes(self):
         if self._jokes is None:
@@ -250,6 +254,13 @@ class MessageMode(Mode):
                 mascot.ask(self.config, "idle")
             return True
         if source != "message":
+            if action == "prev" and self._back:
+                self._current = self._back.pop()     # the one before
+                cycle = int(self.settings.get("cycle_seconds", 0) or 0)
+                self._next_switch = time.time() + cycle if cycle else float("inf")
+                return True
+            if self._current:
+                self._back = (self._back + [self._current])[-20:]
             self._current = None      # a new joke / fortune
             return True
         return False

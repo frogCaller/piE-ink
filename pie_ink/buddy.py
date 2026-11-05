@@ -300,7 +300,7 @@ class Buddy:
             st = camera.CAMERA.status()
             if st.get("age") is None or st["age"] > 3:
                 return                                # no fresh picture (starting, or reopening)
-            if P.looking or P.driving() or now < P.move_until + 0.5:
+            if P.looking or P.gesturing or P.driving() or now < P.move_until + 0.5:
                 self.prev = None                      # the picture moves because the camera does
                 return
             frame = camera.CAMERA.frame()
@@ -630,6 +630,8 @@ class Buddy:
             return False, "following you"
         if P.looking:
             return False, "looking around"
+        if P.gesturing:
+            return False, "answering with its head"
         if P.driving() or now - P.touched_at < USER_PAUSE:
             return False, "you're steering"
         # its motors get a rest: however keen the settings, the camera turns at most so many seconds
@@ -699,7 +701,7 @@ class Buddy:
         self._gaze(target[0], config)                 # its eyes go first, the camera follows
         try:
             P.glide(pan=target[0], tilt=target[1],    # slowly, easing in and out
-                    stop=lambda: self.stop_flag.is_set() or P.looking or bool(P.follow_on))
+                    stop=lambda: self.stop_flag.is_set() or P.looking or bool(P.gesturing) or bool(P.follow_on))
         except (OSError, ValueError) as e:
             log.info("friend: couldn't turn: %s", e)
             self.next_move = now + every

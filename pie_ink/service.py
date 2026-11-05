@@ -4,6 +4,7 @@ Flask never touches the hardware; it calls set_mode()/apply_settings() here.
 """
 import logging
 import threading
+import time
 
 from . import badge
 from . import panels
@@ -11,9 +12,9 @@ from . import settings as cfg
 from .modes import MODES
 
 CYCLE = ["me", "clock", "weather", "message", "image", "reader", "camera", "music",
-         "groupchat", "crypto", "system", "gps", "buddy"]
+         "groupchat", "crypto", "system", "buddy"]
 # on a colour panel these screens are drawn by their colour versions (pie_ink/lcd_screens.py)
-COLOUR_SCREENS = {"system", "weather", "crypto", "gps", "camera", "map", "buddy"}
+COLOUR_SCREENS = {"system", "weather", "crypto", "camera", "buddy"}
 
 log = logging.getLogger(__name__)
 
@@ -25,11 +26,15 @@ class DisplayService(threading.Thread):
         self.panel = panels.make(self.config["display"])
         self._size_the_words()
         self._mode = None
+        from . import pad
+        pad.attach(self)                 # (the GPi Case's buttons, screen by screen)
         self._pending_mode = self.config.get("startup_mode", "clock")
         self._wake = threading.Event()
         self._lock = threading.Lock()
+        self._settings_lock = threading.RLock()   # one settings change at a time: two at once would lose one's keys
         self._running = True
         self._last_error = None
+        self._said_error = (None, 0.0)   # the last panel error written to the log, and when: the same one again is kept short
         self._frames = 0
         self._buttons = None
         self._cycle_at = 0.0           # when the slideshow next moves on
@@ -93,13 +98,16 @@ class DisplayService(threading.Thread):
         self.on_button_action(action)
 
     def on_button_action(self, action):
-        """A named action from a HAT key."""
+        """A named action from a HAT key. True when the screen took a "prev" / "next" itself."""
+        from . import attention
+        attention.touch()
         if self.mode_name == "off" and action != "none":
             self.set_mode(self.config.get("startup_mode", "clock"))
             return
         if action in ("prev", "next"):
             if self._mode and self._mode.on_button(action):
                 self._wake.set()
+                return True
         elif action in ("next_mode", "prev_mode"):
             cur = self.mode_name if self.mode_name in CYCLE else CYCLE[0]
             i = (CYCLE.index(cur) + (1 if action == "next_mode" else -1)) % len(CYCLE)
@@ -129,8 +137,25 @@ class DisplayService(threading.Thread):
 
     def apply_settings(self, patch):
         """Merge a partial config into the running one, hot-apply it, and save
-        it if the disk allows. The running config never depends on the disk."""
-        config = cfg.merge(self.config, patch)
+        it if the disk allows. The running config never depends on the disk —
+        but a config.yaml written by someone else since (setup.sh, a hand edit)
+        is the base the patch goes onto, so it isn't written over with a stale copy.
+        Two changes arriving together (two switches flipped quickly) go one
+        after the other, each onto the other's result."""
+        with self._settings_lock:
+            return self._apply(patch)
+
+    def _apply(self, patch):
+        base = self.config
+        if cfg.changed_on_disk():
+            try:
+                base = cfg.load()
+                log.info("config.yaml changed on disk: taking it up")
+            except Exception:
+                log.exception("config.yaml changed on disk but couldn't be read; keeping the running settings")
+        if isinstance(patch.get("display"), dict) and "driver" in patch["display"] and "auto" not in patch["display"]:
+            patch = {**patch, "display": {**patch["display"], "auto": False}}     # your pick: no more picking by itself
+        config = cfg.merge(base, patch)
         cfg.save(config)
         with self._lock:
             old, new = self.config["display"], config["display"]
@@ -209,7 +234,12 @@ class DisplayService(threading.Thread):
 
     def _frame(self, mode):
         """What the active mode looks like now: on a colour panel, the colour
-        version of its screen where there is one; otherwise the mode's own."""
+        version of its screen where there is one; otherwise the mode's own.
+        In the GPi Case, home (B) over it when that's open."""
+        if getattr(self.panel, "footer", False):
+            from . import pad
+            if pad.menu_open():
+                return pad.menu_frame(self.panel.size, self.config)
         if self.panel.colour:
             image = self._colour_frame(mode.name, self.config)
             if image is not None:
@@ -220,7 +250,8 @@ class DisplayService(threading.Thread):
         from . import lcd_screens
         display = config.get("display", {})
         conf = {"screen": name, "light_mode": not display.get("dark_mode"),
-                "accent": display.get("accent", "#62d2ff"), "crypto_days": display.get("crypto_days", 1)}
+                "accent": display.get("accent", "#62d2ff"), "crypto_days": display.get("crypto_days", 1),
+                "pad": bool(getattr(self.panel, "footer", False))}     # (the GPi Case: its buttons pick, its screens say)
         if name == "image":                      # a colour painting from the Draw tab beats the e-ink drawing
             from .paint import PAINT
             if PAINT.image() is None:
@@ -262,8 +293,22 @@ class DisplayService(threading.Thread):
             self._mode.start()
             self._last_error = None
         except Exception as e:
-            log.exception("could not start mode %s", name)
+            self._complain(f"could not start mode {name}", e)
             self._last_error = f"{type(e).__name__}: {e}"
+
+    def _complain(self, what, e):
+        """A panel that won't open or draw: the whole traceback the first time, then one
+        line a minute while it is the same trouble — the log stays readable, and the
+        message (SPI off, say) stays in view."""
+        msg = f"{type(e).__name__}: {e}"
+        said, at = self._said_error
+        now = time.time()
+        if msg != said:
+            log.exception("%s", what)
+            self._said_error = (msg, now)
+        elif now - at >= 60:
+            log.warning("%s — still: %s", what, e)
+            self._said_error = (msg, now)
 
     def run(self):
         while self._running:
@@ -311,12 +356,15 @@ class DisplayService(threading.Thread):
             try:
                 if not panel.is_open:
                     panel.open()
+                if getattr(panel, "footer", False):
+                    from . import pad
+                    panel.hints = pad.footer(self)          # this screen's buttons, along the bottom
                 if panel.show(badge.apply(self._frame(mode), self.config, mode.name)):
                     self._frames += 1
                 self._last_error = None
                 wait = max(float(mode.interval), panel.min_interval)
             except Exception as e:
-                log.exception("render failed")
+                self._complain("render failed", e)
                 self._last_error = f"{type(e).__name__}: {e}"
                 wait = 5.0
         self._wake.wait(wait)

@@ -1,14 +1,13 @@
 """Where the Pi is, without being told.
 
-The GPS receiver says exactly, when there is one with a fix. Without one, the
-Pi's internet address says roughly — the town, most of the time, which is
-all the weather needs. Asked once when it starts with no location set (and
-again at each start while the location is the network's own, in case the Pi
-has moved house), and whenever you press **Find me**. A location you typed
-in is never replaced by the network's guess; a GPS fix replaces either, if
-you let it (the GPS's *Move the weather to wherever it is* switch).
+The Pi's internet address says roughly — the town, most of the time, which
+is all the weather needs. Asked once when it starts with no location set
+(and again at each start while the location is the network's own, in case
+the Pi has moved house), and whenever you press **Find me**. A location you
+typed in is never replaced by the network's guess.
 """
 import logging
+import math
 import time
 
 from . import cache
@@ -55,6 +54,18 @@ def from_network(cached_only=False):
     return cache.cached("ip_location", NETWORK_TTL, fetch, cached_only)
 
 
+def where(config):
+    """The position we have: the weather location, as {lat, lon, place,
+    typed}. None when none is set."""
+    w = (config or {}).get("weather", {})
+    if w.get("lat") is not None and w.get("lon") is not None:
+        return {"lat": float(w["lat"]), "lon": float(w["lon"]), "place": w.get("location") or "",
+                "typed": w.get("source") == "typed"}
+    return None
+
+
 def distance_km(a, b):
-    from .gps import distance_km as d
-    return d(a, b)
+    """Great-circle distance between two (lat, lon) pairs."""
+    la1, lo1, la2, lo2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    return 2 * 6371 * math.asin(math.sqrt(h))

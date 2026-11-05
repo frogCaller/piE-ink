@@ -33,3 +33,18 @@ def open_header_chip(lgpio):
         raise RuntimeError("no permission for /dev/gpiochip*: add the user to the gpio group "
                            "(sudo usermod -aG gpio $USER) and log in again")
     raise RuntimeError("no GPIO chip with a pinctrl-* label found; is this a Raspberry Pi?")
+
+
+def spi_problem(e, bus=0, cs=0):
+    """What an OSError from opening an SPI device means, in a sentence — or
+    None when it is something else. /dev/spidev0.0 missing is SPI switched
+    off in the Pi's config (the usual one); permission denied is the group."""
+    dev = f"/dev/spidev{bus}.{cs}"
+    if isinstance(e, FileNotFoundError):
+        return (f"SPI is off: {dev} isn't there. Turn it on — sudo raspi-config nonint do_spi 0 "
+                f"(or raspi-config → Interface Options → SPI), check /boot/firmware/config.txt has "
+                f"dtparam=spi=on, and reboot.")
+    if isinstance(e, PermissionError):
+        return (f"no permission for {dev}: add the user to the spi group (sudo usermod -aG spi,gpio $USER) "
+                f"and log in again, or restart the service.")
+    return None

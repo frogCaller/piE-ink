@@ -54,6 +54,81 @@ def base(conf):
     return normalise(conf.get("host"))
 
 
+_tags = {}                       # host -> (when, [model names]); the list changes rarely, so it's asked rarely
+
+
+def models_on(host, timeout=4, max_age=120):
+    """The models on a host, as /api/tags lists them — asked at most every couple of minutes."""
+    now = time.time()
+    hit = _tags.get(host)
+    if hit and now - hit[0] < max_age:
+        return hit[1]
+    names = probe({}, timeout=timeout, host=host)["models"]
+    if names or not hit:
+        _tags[host] = (now, names)
+    return names
+
+
+def resolve_model(host, name, timeout=4):
+    """The name as the host knows it. "tev1" is "tev1:latest" there — but with
+    only tev1:0.8b pulled, Ollama would say 404 to "tev1", so that is what
+    "tev1" means then (the smallest, when there are several). A name the
+    host doesn't list, or a host that doesn't answer, comes back as given."""
+    name = (name or "").strip()
+    if not name or ":" in name:
+        return name
+    try:
+        names = models_on(host, timeout=timeout)
+    except Exception:
+        return name
+    if not names or name in names or f"{name}:latest" in names:
+        return name
+    same = sorted(m for m in names if m.split(":")[0] == name)
+    return same[0] if same else name
+
+
+def decision_host(conf):
+    """Where the decision models live: the bot's Ollama, or the back-up (the Pi).
+    Snake and the yes/no nods ask there."""
+    return base(conf) or normalise(conf.get("backup_host") or PI)
+
+
+def choose(host, model, state, instructions, criteria, timeout=8.0, keep_alive="30m"):
+    """One choice from a decision model (Ollama's tev1, nimble, clef): POST
+    /v1/systemone with the state in words and the options, each with a line
+    on what it means. -> {"choice", "probs", "confidence", "ms"}. Raises
+    ValueError with a line worth showing when the model isn't there or the
+    answer can't be read; a connection error comes through as-is."""
+    body = {"model": model, "keep_alive": keep_alive, "state": state,
+            "questions": {"answer": {"type": "choice", "instructions": instructions, "criteria": dict(criteria)}}}
+    t0 = time.monotonic()
+    r = requests.post(f"{host}/v1/systemone", json=body, timeout=timeout)
+    ms = int((time.monotonic() - t0) * 1000)
+    if r.status_code == 404:
+        raise ValueError(f"{model} isn't on {host.split('//')[-1]} — ollama pull {model}")
+    r.raise_for_status()
+    res = r.json()
+    opts = list(criteria)
+    a = res.get("answers", res.get("answer", res)) if isinstance(res, dict) else None
+    if isinstance(a, list):
+        a = a[0] if a else None
+    elif isinstance(a, dict) and "answer" in a and isinstance(a["answer"], dict):
+        a = a["answer"]
+    elif isinstance(a, dict) and "choice" not in a:
+        a = next(iter(a.values()), None)
+    if not isinstance(a, dict):
+        raise ValueError("couldn't read an answer from the model")
+    probs, pr = {}, a.get("probabilities")
+    if isinstance(pr, list):
+        probs = {o: float(p or 0) for o, p in zip(opts, pr)}
+    elif isinstance(pr, dict):
+        probs = {o: float(pr.get(o) or 0) for o in opts}
+    choice = a.get("choice")
+    if choice not in opts:
+        choice = max(opts, key=lambda o: probs.get(o, 0)) if probs else opts[0]
+    return {"choice": choice, "probs": probs, "confidence": a.get("confidence"), "ms": ms}
+
+
 def targets(conf):
     """Where to ask, in order: the machine you chose, then the Pi if you asked
     for that as a back-up. Each has its own model — a Pi can't run a 27B."""

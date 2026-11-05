@@ -18,9 +18,11 @@ import time
 import psutil
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
-from pie_ink import (agent, audio, buddy, cache, chat, coingecko, friends, gps, here, holdings, home, journey, lcd, lcd_screens, listen, llm, locate,
-                     maps, mascot, mesh, mining, music, panels, photos, presence, ptz, reader, sight, social, sources,
-                     sysupdate, telegram, watcher, watchlist, weather, whisplay)
+from pie_ink import (agent, attention, audio, borrow, buddy, cache, chat, coingecko, doing, drives, friends, gestures, here, holdings, home, household, lcd,
+                     lcd_screens, gamepad, listen, llm, locate, mascot, mesh, mining, moods, music, notebook, pad, panels, pet, photos, pitato,
+                     pitato_screen, plugs, presence, ptz,
+                     reader, reminders,
+                     shelf, sight, snake, social, sources, stocks, sysupdate, telegram, usbwatch, watcher, watchlist, weather, whisplay)
 from pie_ink.paint import PAINT
 from pie_ink.modes import postcard
 from pie_ink.modes.me import Day
@@ -102,9 +104,6 @@ def api_now():
     room = presence.summary()
     if room:
         out["room"] = room
-    g = gps.GPS.status()
-    if g["enabled"]:
-        out["gps"] = {"fix": g["fix"], "place": g.get("place") or "", "sats": g.get("sats_used"), "connected": g["connected"]}
     tv = home.HOME.tv_state()
     if tv:
         out["tv"] = tv
@@ -119,7 +118,21 @@ def api_now():
     hv = holdings.HOLDINGS.value_now
     if hv and hv["items"]:
         out["holdings"] = {"total": hv["total"], "day": hv["day"], "day_pct": hv["day_pct"],
-                           "move": (holdings.HOLDINGS.move or {}).get("kind")}
+                           "move": (holdings.HOLDINGS.move or {}).get("kind"), "whose": holdings.whose(hv)}
+    due = reminders.REMINDERS.pending()
+    if due:
+        out["reminder"] = {"text": due[0]["text"], "at": due[0]["at"], "words": reminders.REMINDERS.describe(due[0]),
+                           "more": len(due) - 1}
+    rooms = household.HOUSE.rooms()
+    if rooms:
+        out["rooms"] = {"count": len(rooms), "labels": [r["label"] for r in rooms[:4]],
+                        "showing": [r.get("mode") or "" for r in rooms[:4]]}
+    pt = pitato.PITATO.status()
+    if pt["any"]:
+        first = pt["pitatos"][0]
+        out["pitato"] = {"name": first["name"], "ago": first["ago"], "asks": first["asks"], "url": first["url"], "here": first["here"],
+                         "cameras": first["cameras"], "more": len(pt["pitatos"]) - 1, "excited": pt["excited"],
+                         "activity": first["activity"]}
     last = sight.events(limit=1)
     if last:
         out["event"] = {"text": last[0]["text"], "ago": int(time.time() - last[0]["ts"]), "level": last[0].get("level")}
@@ -133,7 +146,67 @@ def api_now():
         names = dict(lcd_screens.LABELS)
         out["lcd"] = {"screen": st.get("screen"), "label": names.get(st.get("screen"), st.get("screen")),
                       "running": st.get("running"), "error": st.get("error")}
+    sg = snake.GAME.status()
+    if sg["playing"]:
+        out["snake"] = {"score": sg.get("score", 0), "best": sg["best"], "model": sg["model"], "error": sg["error"],
+                        "bored": _bored["from"] is not None}
     return ok(**out)
+
+
+@app.get("/api/pet")
+def api_pet():
+    """The head that answers yes and no: whether it can, and the last question it answered."""
+    return ok(available=ptz.PTZ.available(), gesture=ptz.PTZ.gesturing, last=pet.status(),
+              model=pet.model(service.config.get("pet", {})))
+
+
+def _head(kind):
+    """Nod, shake or tilt its head, in the background: (started, what to say)."""
+    kind = {"yes": "nod", "no": "shake", "unsure": "tilt", "hmm": "tilt"}.get(kind, kind)
+    if kind not in ("nod", "shake", "tilt"):
+        return False, "nod, shake or tilt"
+    if not ptz.PTZ.available():
+        return False, "no camera that turns is plugged in"
+    if ptz.PTZ.gesturing or ptz.PTZ.looking:
+        return False, "its head is busy"
+    threading.Thread(target=ptz.PTZ.gesture, args=(kind,), kwargs={"tempo": pet.tempo(service.config.get("pet", {}))},
+                     daemon=True, name="pet-head").start()
+    return True, {"nod": "Nodding.", "shake": "Shaking its head.", "tilt": "Tilting its head."}[kind]
+
+
+@app.post("/api/pet/try")
+def api_pet_try():
+    """Nod, shake or tilt, to see it: {"gesture": "nod"} — in the background."""
+    kind = ((request.get_json(silent=True) or {}).get("gesture") or "nod").strip().lower()
+    started, why = _head(kind)
+    if not started:
+        return fail(why)
+    return ok(started=kind)
+
+
+@app.get("/api/snake")
+def api_snake():
+    """How the game on the little screen is going."""
+    return ok(**snake.GAME.status(), bored=_bored["from"] is not None,
+              idle_minutes=round(attention.idle_seconds() / 60, 1))
+
+
+@app.before_request
+def _someone_is_here():
+    """Anything you do on the page counts as attention; the page's own polling doesn't.
+    A request from a Pietato (its User-Agent says so) means the handheld Pi is about."""
+    if pitato.PITATO.is_pitato(request.headers.get("User-Agent")):
+        pitato.PITATO.heard(request.remote_addr, request.path)
+        return
+    if request.method in ("POST", "PUT", "DELETE") and request.path.startswith("/api/") \
+            and not request.path.startswith(AUTOMATIC):
+        attention.touch()
+
+
+# the page sends these on its own, without a hand on it
+AUTOMATIC = ("/api/lcd/preview.png", "/api/render.png", "/api/here/", "/api/ptz/stop", "/api/camera/pause")
+# bored: "from" is the LCD screen Snake took over from (None = not bored); see _bored_loop
+_bored = {"from": None, "checked": 0.0, "there": False, "ended": 0.0}
 
 
 @app.put("/api/settings")
@@ -161,26 +234,28 @@ def _after_settings(patch, config):
         threading.Thread(target=start_watching, daemon=True).start()
     if "lcd" in patch or "display" in patch:
         threading.Thread(target=_lcd_apply, args=(config,), daemon=True).start()
-    if "gps" in patch:
-        threading.Thread(target=gps.GPS.update, args=(_gps_conf(config),), daemon=True).start()
     if "display" in patch or "whisplay" in patch:
         threading.Thread(target=start_board, daemon=True).start()
+    if "display" in patch:
+        threading.Thread(target=start_gamepad, daemon=True).start()
     if "home" in patch:
         home.HOME.configure(config.get("home", {}))
+    if "gestures" in patch or "home" in patch:
+        gestures.GESTURES.configure(config.get("gestures", {}))
     if "agent" in patch:
         threading.Thread(target=agent.AGENT.update, args=(config.get("agent", {}),), daemon=True).start()
     if "ptz" in patch:
         ptz.PTZ.configure(config.get("ptz", {}))
+    if "camera" in patch:
+        camera.CAMERA.configure(config.get("camera", {}))
     if "buddy" in patch:
         buddy.BUDDY.update(config.get("buddy", {}))
-    if "journey" in patch:
-        journey.JOURNEY.configure(config.get("journey", {}))
     for pool in ("duco", "verus"):
         if pool in patch:
             threading.Thread(target=mining.MINERS[pool].update, args=(config.get(pool, {}),), daemon=True).start()
     if "holdings" in patch:
         threading.Thread(target=holdings.HOLDINGS.update, args=(config.get("holdings", {}),), daemon=True).start()
-    if "me" in patch or "camera" in patch or "gps" in patch or "audio" in patch or "listen" in patch or "llm" in patch:
+    if "me" in patch or "camera" in patch or "audio" in patch or "listen" in patch or "llm" in patch:
         mesh.my_caps(config, fresh=True)          # the beacon tells the others straight away
 
 
@@ -386,10 +461,10 @@ def _lcd_render(conf):
 
 
 lcd.SECOND.render = _lcd_render          # known from the start, so enabling it later just works
+lcd_screens.MAIN_MODE = lambda: service.mode_name   # "Same as the e-ink": what the panel shows, drawn for the LCD
 home.HOME.configure(service.config.get("home", {}))
-friends.where_from(lambda: maps.where(service.config))   # the beacon says where we are, for friends' maps
+friends.where_from(lambda: locate.where(service.config))  # the beacon says where we are (the weather spot)
 friends.caps_from(lambda: mesh.my_caps(service.config))  # and what we have, so "find the pi with a camera" works
-journey.JOURNEY.configure(service.config.get("journey", {}))
 lcd.SECOND.interval = lcd_screens.interval
 
 
@@ -397,6 +472,8 @@ def _lcd_conf(config):
     conf = dict(config.get("lcd", {}))
     if os.environ.get("PIE_INK_DRIVER") == "mock":
         conf["driver"] = "mock"                  # no hardware here either
+    if _bored["from"] is not None:               # bored: Snake is up, without touching the saved choice
+        conf["screen"] = "snake"
     return conf
 
 
@@ -466,6 +543,30 @@ def _hold_to_talk():
     listen.EARS.wake_now()
     llm.set_speech("…", "listening")
     service.poke()
+
+
+def start_gamepad():
+    """The GPi Case 2W's buttons (or any game controller), only while its screen is the panel: each
+    screen's own (pie_ink/pad.py), shown along the bottom of the case's screen."""
+    if service.panel.name != "gpicase":
+        gamepad.PADS.stop()
+        return False
+    gamepad.PADS.on_press = pad.press
+    return gamepad.PADS.start()
+
+
+@app.get("/api/gpi")
+def api_gpi():
+    """The GPi Case's buttons: the controllers being read, the last button pressed and what it did,
+    and what this screen's buttons are."""
+    pads = gamepad.PADS
+    last = None
+    if pads.last:
+        last = {"button": pads.last[0], "did": pads.last[1], "ago": int(time.time() - pads.last[2])}
+    hints, screen, _accent = pad.footer(service)
+    return ok(running=pads.running(), found=pads.found, last=last, problem=pads.problem,
+              panel=service.panel.name in ("gpicase", "mock_gpicase"), screen=screen,
+              buttons=[{"key": k, "does": label, "on": bool(on)} for k, label, on in hints])
 
 
 def start_board():
@@ -585,43 +686,10 @@ def api_paint():
     return ok(version=version, shown=shown, lcd_on=bool(service.config.get("lcd", {}).get("enabled")))
 
 
-# -- the map --------------------------------------------------------------------------------
-
-@app.get("/api/map")
-def api_map():
-    """Where we are, where the other PiE-inks are, and what the page needs
-    to draw its own map."""
-    me = maps.where(service.config)
-    others = []
-    for p in friends.peers():
-        wh = p.get("where") or {}
-        if wh.get("lat") is None:
-            continue
-        others.append({"host": p["host"], "url": p["url"], "lat": wh["lat"], "lon": wh["lon"],
-                       "place": wh.get("place") or "", "source": wh.get("source"), "ago": p["ago"], "mode": p.get("mode")})
-    m = service.config.get("map", {})
-    return ok(me=me, friends=others, tiles=maps.TILE_URL, zoom=int(m.get("zoom", 15) or 15),
-              me_host=socket.gethostname(), cache=maps.cache_status(), gps=gps.GPS.status())
-
-
-@app.post("/api/map/prefetch")
-def api_map_prefetch():
-    """Fetch the tiles the e-ink map needs for its current view now (the
-    page's Fetch button), so the panel has them the moment it is shown."""
-    me = maps.where(service.config)
-    if not me:
-        return fail("no position yet")
-    m = service.config.get("map", {})
-    zoom = int(m.get("zoom", 15) or 15)
-    w, h = service.panel.width, service.panel.height
-    started = maps.fetch_async(me["lat"], me["lon"], zoom, (w, max(20, h - 29)))
-    return ok(started=started, cache=maps.cache_status())
-
-
 # -- Telegram --------------------------------------------------------------------------
 
 TG_HELP = """What I can do from here:
-/screen <name> — put a screen up (clock, weather, me, message, drawing, book, camera, music, chat, crypto, system, off)
+/screen <name> — put a screen up (clock, weather, me, earnings, message, drawing, book, camera, music, chat, finance, system, off)
 /screens — list them
 /panel — a picture of what's on the panel now
 /photo — a picture from the camera; /photo sepia (or bw, sketch, edges, comic, pixel, e-ink…) takes a photo with that filter and keeps it
@@ -629,24 +697,28 @@ TG_HELP = """What I can do from here:
 /say <words> — say it out loud on the Pi
 /message <words> — put it on the message screen
 /status — how things are
-/map — where it is, as a map
-/journey — where it has been today, as a map and a line; /journey 2026-09-20 for another day
 /events — what the camera has seen today (person, package, door, pets)
 /agent — what the agent last thought; /agent now for a fresh check
-/pis — the other PiE-inks and what each has
+/pis — the other PiE-inks and what each has, and a Pietato when one's about
 /look — a camera that turns looks around and says what it sees, with the picture; /look left, /look up…
 /follow — an OBSBOT follows you by itself; /follow off to stop (or say "follow me", "stop following me")
+/yes, /no — the camera nods, or shakes its head; /hmm tilts it (a yes-or-no question gets this by itself)
 /friend — how the little friend is; /friend on, /friend off
 /mining — your miners: balance, hashrate, workers (Duino-Coin and Verus); /duco, /verus for one
-/holdings — what your crypto is worth, coin by coin, and how today went
+/holdings — what your coins and shares are worth, one by one, and how today went
+/pietato time (or /pietato weather — any screen —, /pietato drawing, /pietato <words>) — on the Pietato's screen, full screen
+/remind in 20 minutes to check the oven — a reminder (or /remind at 5 pm …, tomorrow at 9 …); /timer 10 — a timer; /reminders — what's set
+/remember the bins go out on tuesday — into its notebook; /notes — what it remembers; /forget the bins
 /tv — a remote for the TV, as buttons (Home Assistant, once it's set up); /tv 5452, /tv on, /tv volume up
 turn on the tv, channel 5452, volume up, turn off the lamp — the same, in words
 take a picture, take a black and white photo — a photo, kept on the Pi
-show me the camera from upstairs, send this drawing to the workshop pi, which pi has a gps — the other Pis
+show me the camera from upstairs, send this drawing to the workshop pi, which pi has a camera — the other Pis
 Anything else and I'll just answer you."""
 
 SCREEN_WORDS = {"drawing": "image", "draw": "image", "book": "reader", "read": "reader", "you": "me",
-                "chat": "groupchat", "group": "groupchat", "location": "gps", "where": "gps",
+                "chat": "groupchat", "group": "groupchat",
+                "finance": "crypto", "stocks": "crypto", "shares": "crypto", "markets": "crypto", "coins": "crypto",
+                "salary": "earnings", "pay": "earnings", "income": "earnings",
                 "friend": "buddy", "face": "buddy"}
 
 # the remote /tv puts in the chat: rows of (label, what the tap does)
@@ -723,8 +795,16 @@ def _tg_notify(text, photo=None):
 
 def _tg_command(text):
     """A line from your Telegram chat. Returns text, or (png, caption) for a picture."""
+    attention.touch()
     conf = service.config
     low = text.lower().strip()
+    said = re.match(r"/(?:pietato|pie-tato|pitato)(?:\s+|$)", low)        # (/pitato, as it was first called)
+    if said:
+        rest = text.strip()[said.end():].strip()
+        word = rest.lower()
+        kind = ("clock" if word in ("", "time", "clock") else "drawing" if word in ("drawing", "draw", "picture")
+                else "stop" if word in ("stop", "off") else "screen" if _screen_named(word) else "message")
+        return _pitato_screen_do(kind, None, rest if kind == "message" else "", name=word if kind == "screen" else None)[1]
     if low in ("/start", "/help", "help"):
         return TG_HELP
     from pie_ink.modes import MODES
@@ -749,28 +829,6 @@ def _tg_command(text):
         elif not home.parse(words, home.HOME.tv_names()):
             words = f"open {words} on the {first}"       # "/tv netflix"
         return _home_command(words, "telegram") or f"I don't know how to do '{words}' — /tv on its own shows the buttons."
-    if low.startswith(("/map", "/where")):
-        me = maps.where(conf)
-        if not me:
-            return "No position yet — plug the GPS in, or press Find me on the Weather tab."
-        link = f"https://www.openstreetmap.org/?mlat={me['lat']:.5f}&mlon={me['lon']:.5f}#map=16/{me['lat']:.5f}/{me['lon']:.5f}"
-        caption = (f"{me['place'] + ' — ' if me.get('place') else ''}{me['lat']:.5f}, {me['lon']:.5f} "
-                   f"({maps.source_words(me)})\n{link}")
-        try:
-            return (service.render_preview("map", None), caption)
-        except Exception as e:
-            log.info("telegram /map render: %s", e)
-            return caption
-    if low.startswith("/journey"):
-        day = (low.split(None, 1)[1].strip() if " " in low else "") or journey.today()
-        pts = journey.JOURNEY.points(day)
-        line = journey.summary(day, conf.get("weather", {}).get("units", "F"), pts) or f"Nothing recorded for {day}."
-        if len(pts) >= 2 and day == journey.today():
-            try:
-                return (service.render_preview("map", None), line)
-            except Exception as e:
-                log.info("telegram /journey render: %s", e)
-        return line
     if low.startswith("/events"):
         items = sight.events(limit=20, since=time.time() - 24 * 3600)
         if not items:
@@ -795,7 +853,13 @@ def _tg_command(text):
         acts = "; ".join(f"{a['do']}: {a['text']}" for a in last.get("actions", []))
         return f"{when} [{last.get('level')}] {last.get('thought')}" + (f"\nDid: {acts}" if acts else "") + "\n/agent now for a fresh check."
     if low.startswith("/pis"):
-        return _mesh_do({"kind": "list"}, friends.peers(), "telegram")
+        return _mesh_do({"kind": "list"}, _everyone_for_mesh(), "telegram")
+    first = (low.split() or [""])[0]
+    if first in ("/yes", "/no", "/nod", "/shake", "/hmm", "/tilt"):
+        started, why = _head({"/yes": "nod", "/no": "shake", "/nod": "nod", "/shake": "shake", "/hmm": "tilt", "/tilt": "tilt"}[first])
+        if not started:
+            return "There's no camera here that turns." if "no camera" in why else f"Couldn't — {why}."
+        return why
     if low.startswith("/look"):
         where = text.split(None, 1)[1].strip() if " " in text else "around"
         done = _camera_command(f"look {where}", "telegram")
@@ -828,7 +892,7 @@ def _tg_command(text):
             if not m.enabled():
                 if low.startswith("/mining") and len(pools) > 1:
                     continue
-                out.append(f"{m.title.title()} is off — set it up under Crypto → {m.title.title()}.")
+                out.append(f"{m.title.title()} is off — set it up under Finance → {m.title.title()}.")
                 continue
             d = m.snapshot()
             if not d:
@@ -849,7 +913,26 @@ def _tg_command(text):
             if tail:
                 lines.append(" · ".join(tail))
             out.append("\n".join(lines))
-        return "\n\n".join(out) if out else "No mining set up — Crypto → Duino-Coin or Verus."
+        return "\n\n".join(out) if out else "No mining set up — Finance → Duino-Coin or Verus."
+    if low.startswith("/reminders"):
+        return reminders.REMINDERS.do({"kind": "list"}, "telegram")
+    if low.startswith("/remind"):
+        arg = text.split(None, 1)[1].strip() if " " in text.strip() else ""
+        if not arg:
+            return "Remind you of what, and when? /remind in 20 minutes to check the oven"
+        return _reminder_command("remind me " + arg, "telegram") or "Couldn't find a time in that — /remind in 20 minutes to …, or at 5 pm …"
+    if low.startswith("/timer"):
+        arg = text.split(None, 1)[1].strip() if " " in text.strip() else ""
+        arg = arg if re.search(r"[a-z]", arg) else (f"{arg} minutes" if arg else "")
+        return _reminder_command(f"set a timer for {arg}", "telegram") if arg else "A timer for how long? /timer 10"
+    if low.startswith("/remember"):
+        arg = text.split(None, 1)[1].strip() if " " in text.strip() else ""
+        return notebook.do({"kind": "add", "text": arg}, "telegram") if arg else "Remember what? /remember the bins go out on tuesday"
+    if low.startswith("/notes"):
+        return notebook.do({"kind": "list"}, "telegram")
+    if low.startswith("/forget"):
+        arg = text.split(None, 1)[1].strip() if " " in text.strip() else ""
+        return notebook.do({"kind": "forget", "text": arg}, "telegram") if arg else "Forget what? /forget the bins"
     if low.startswith("/panel"):
         png = service.preview_png()
         return (png, f"On the panel: {service.mode_name}") if png else "Nothing to show yet."
@@ -904,13 +987,6 @@ def _tg_command(text):
         if home.HOME.enabled() and home.HOME.ready() and home.HOME.conf.get("tv"):
             tv = home.HOME.state_of(home.HOME.conf["tv"])
             bits.append(f"TV: {home._state_word(tv)}" if tv else f"TV: can't ask ({home.HOME.error})")
-        g = gps.GPS.status()
-        if g["enabled"]:
-            if g["fix"] != "none":
-                bits.append(f"GPS: {g['lat']:.4f}, {g['lon']:.4f}" + (f" ({g['place']})" if g.get("place") else "")
-                            + f", {g['sats_used']} satellites")
-            else:
-                bits.append("GPS: no fix yet" if g["connected"] else "GPS: no receiver plugged in")
         return "\n".join(bits)
     done = _home_command(text, "telegram")
     if done is not None:
@@ -994,34 +1070,42 @@ def _image_from(data_url):
 
 
 def _arrived(msg):
-    """A friend's Pi sent something. Show it, say it, and let the bot answer if it was for the bot."""
+    """A friend's Pi sent something — or one of your other rooms did (another PiE-ink of yours:
+    the same bot, on another screen). Show it, say it, and let the bot answer if it was for the bot."""
     conf = service.config
     sender = msg.get("from") or "a friend"
     kind = msg.get("kind")
     text = (msg.get("text") or "").strip()
     social_conf = conf.get("social", {})
+    room = household.HOUSE.room(sender)
+    whence = f"from {room['label']}" if room else f"from {sender}"
 
     if kind == "postcard" and msg.get("image"):
         try:
-            postcard.keep(_image_from(msg["image"]), sender, text)
+            postcard.keep(_image_from(msg["image"]), room["label"] if room else sender, text)
         except Exception as e:
             log.warning("bad postcard from %s: %s", sender, e)
             return
         if social_conf.get("show_postcards", True):
             service.set_mode("postcard")
         if social_conf.get("speak_messages", True):
-            audio.say(f"A postcard from {sender}." + (f" It says: {text}" if text else ""),
+            audio.say(f"A postcard {whence}." + (f" It says: {text}" if text else ""),
                       conf.get("audio", {}))
         return
 
     if _tg_conf().get("notify_friends", True) and kind in ("text", "postcard"):
-        _tg_notify(f"{sender}: {text}" if kind == "text" else f"A postcard from {sender}" + (f" — {text}" if text else ""),
+        _tg_notify(f"{whence.capitalize()}: {text}" if kind == "text" else f"A postcard {whence}" + (f" — {text}" if text else ""),
                    photo=_image_from(msg["image"]) if kind == "postcard" and msg.get("image") else None)
     if kind == "text":
-        chat.add("bot", f"{sender} says: {text}", "friend")
+        line = f"{whence.capitalize()}: {text}" if room else f"{sender} says: {text}"
+        chat.add("bot", line, "friend")
         if social_conf.get("speak_messages", True):
-            audio.say(f"{sender} says: {text}", conf.get("audio", {}))
+            audio.say(line, conf.get("audio", {}))
         service.poke()
+        return
+
+    if kind == "ai" and room:                     # one bot in the house: it doesn't chat with itself
+        log.info("%s (a room of this house) sent a line for 'the bot' — there is only the one; ignored", sender)
         return
 
     if kind == "ai":
@@ -1118,7 +1202,9 @@ def api_inbox():
 
 @app.get("/api/social")
 def api_social():
-    return ok(history=social.history(), friends=social.everyone(service.config), **social.status())
+    """Everyone a message can go to — your other rooms (the same bot there) and friends' Pis added by address."""
+    return ok(history=social.history(), friends=social.everyone(service.config),
+              rooms=[r["host"] for r in household.HOUSE.rooms()], **social.status())
 
 
 @app.post("/api/social/send")
@@ -1141,6 +1227,158 @@ def api_social_send():
     if delivered == 0:
         return fail("; ".join(problems) or "nobody to send it to")
     return ok(delivered=delivered, problems=problems, history=social.history())
+
+
+def _room_hello(room, back):
+    """Another PiE-ink of yours showed up on the network (or came back after a while away): the
+    house just got bigger. The one bot is pleased — a line on its screen with a starry-eyed face,
+    out loud, in the events list, and in its own words when it has a model."""
+    conf = service.config
+    label = room.get("label") or room.get("host")
+    text = (f"{label[0].upper()}{label[1:]} is back — the house is whole again." if back
+            else f"The house just got bigger: I'm in {label} now, too!")
+    entry = sight.log_event(text, kind="room", level="info", source="household")
+    try:
+        agent.AGENT.noticed(entry)
+    except Exception:
+        pass
+    llm_conf = conf.get("llm", {})
+    chat.add("bot", text, "remark")
+    llm.set_speech(text, "room")
+    if llm_conf.get("enabled") and (llm_conf.get("model") or "").strip() and not llm.busy():
+        before = llm.latest()["ts"]
+        if mascot.ask(conf, day=_day(), topic="room_back" if back else "room", history=chat.history(6), room=label):
+            threading.Thread(target=_note_remark, args=(before,), daemon=True).start()
+    elif conf.get("audio", {}).get("speak_bot", True):
+        audio.say(text, conf.get("audio", {}))
+    service.poke()
+
+
+household.HOUSE.on_room = _room_hello
+
+
+# -- something plugged into a USB port, or pulled out: the bot's face changes ---------------------
+
+_USB_ASKED = [0.0]             # when the model was last asked about a plug: once a minute at most
+FACE_SCREENS = ("me", "message", "crypto")       # screens with the bot's face on them (the rest get a toast, in colour)
+
+
+def _usb_changed(added, gone, text, kind):
+    """Something came or went on the USB bus (pie_ink/plugs.py): a line on the bot's screen with a face to
+    match — wide-eyed, starry for a drive, sad when it's pulled out — the events list (with the port, for
+    a hub), out loud if the bot speaks; a drive gets looked through, anything else a word from the model."""
+    conf = service.config
+    ports = sorted({usbwatch.where(d["bus"]) for d in added + gone} - {""})
+    entry = sight.log_event(text + (f" ({', '.join(ports)})" if ports else ""), kind="usb", level="info", source="usb")
+    try:
+        agent.AGENT.noticed(entry)
+    except Exception:
+        pass
+    llm.set_speech(text, kind)
+    _usb_toast(text)
+    service.poke()
+    _usb_later(plugs.FRESH + 0.5)
+    if gone and music.PLAYER.tracks and any(os.path.isabs(t["path"]) and not os.path.exists(t["path"]) for t in music.PLAYER.tracks):
+        music.PLAYER.stop()                                     # its songs went with the drive
+        music.PLAYER.load(music.library(conf.get("music", {})), {**conf.get("music", {}), **conf.get("audio", {})})
+    inside = [d for d in added if plugs.kind_of(d) in ("drive", "reader")]
+    if inside:
+        threading.Thread(target=_usb_look_inside, args=(inside,), daemon=True).start()
+        return
+    llm_conf = conf.get("llm", {})
+    if added and llm_conf.get("enabled") and (llm_conf.get("model") or "").strip() and not llm.busy() \
+            and time.time() - _USB_ASKED[0] > 60:
+        _USB_ASKED[0] = time.time()
+        before = llm.latest()["ts"]
+        if mascot.ask(conf, kind="usb", day=_day(), topic="usb", history=chat.history(6), what=plugs.phrase(added)):
+            threading.Thread(target=_note_remark, args=(before,), daemon=True).start()
+
+
+def _usb_look_inside(devs, wait=None):
+    """A USB drive just went in: once it's mounted, what's on it, as the bot's next line ("On the USB drive
+    SANDISK: 214 photos and 12 songs — ask me for any of it."); or that nothing mounted it."""
+    wait = plugs.DRIVE_WAIT if wait is None else wait
+    buses = [d["bus"] for d in devs]
+    deadline = time.time() + wait
+    found = []
+    while True:
+        found = [m for m in drives.mounted() if any(m["bus"] == b or m["bus"].startswith(b + ".") for b in buses)]
+        if found or time.time() >= deadline:
+            break
+        time.sleep(1)
+    if found:
+        time.sleep(0.5)                                         # (a second partition, a moment behind)
+        found = [m for m in drives.mounted() if any(m["bus"] == b or m["bus"].startswith(b + ".") for b in buses)] or found
+        shelf.on_drives(fresh=True, only=found)
+        text, kind = shelf.drive_summary(only=found), "usb-look"
+    elif any(drives.disks_on(b) for b in buses):
+        text, kind = ("I can't look inside it — it isn't mounted. Run setup.sh again and drives get mounted as they "
+                      "go in."), "usb-gone"
+    else:
+        return None                                             # (a card reader with no card in it)
+    plugs.PLUGS.more(text, kind)
+    sight.log_event(text, kind="usb", level="info", source="usb")
+    llm.set_speech(text, kind)
+    _usb_toast(text)
+    service.poke()
+    _usb_later(plugs.FRESH + 0.5)
+    return text
+
+
+def _usb_toast(text):
+    """On a colour screen without the bot's face on it, the line as a toast for a moment."""
+    try:
+        if service.panel.colour and service.mode_name not in FACE_SCREENS:
+            pad.toast(text, 6)
+    except Exception:
+        log.debug("usb toast", exc_info=True)
+
+
+def _usb_later(seconds):
+    """Redraw once the face has gone back to its own."""
+    t = threading.Timer(seconds, service.poke)
+    t.daemon = True
+    t.start()
+
+
+plugs.PLUGS.on_change = _usb_changed
+cache.LENDER = borrow.lend                         # what a Pietato about has fetched, before fetching it again
+
+
+# -- hand gestures: the TV and the lights --------------------------------------------------------------
+
+def _gesture_said(text, what):
+    """What a gesture did, on the bot's screen ("The lights off.") — not out loud: the TV's on."""
+    llm.set_speech(text, "gesture")
+    service.poke()
+
+
+gestures.GESTURES.remote.on_said = _gesture_said
+
+
+@app.get("/api/gestures")
+def api_gestures():
+    """How the hand gestures are doing; with ?lights=1, the lights Home Assistant has, for the picker
+    (and which of them are the TV's room's, the ones used when none are ticked)."""
+    out = gestures.GESTURES.report()
+    out["why_not"] = gestures.why_not() if out["enabled"] or request.args.get("lights") else ""
+    if request.args.get("lights") and home.HOME.enabled() and home.HOME.ready():
+        lights = [{"id": s.get("entity_id"), "name": (s.get("attributes") or {}).get("friendly_name") or s.get("entity_id"),
+                   "on": s.get("state") == "on"}
+                  for s in home.HOME.states() if str(s.get("entity_id", "")).startswith("light.")]
+        out["lights"] = sorted(lights, key=lambda x: str(x["name"]).lower())
+        room = gestures.Remote(home.HOME).group() if home.HOME._tv() else []
+        out["room"] = [x for x in room if any(x == l["id"] for l in lights)] if len(room) < len(lights) else []
+    return ok(**out)
+
+
+@app.get("/api/gestures/view")
+def api_gestures_view():
+    """The camera's picture as the gestures see it, the hands drawn on it (while the page asks for it)."""
+    jpg = gestures.GESTURES.want_view()
+    if not jpg:
+        return ("", 204)
+    return Response(jpg, mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/social/ai/<action>")
@@ -1270,6 +1508,7 @@ def api_watch_do(action):
 
 def _heard(text):
     """Someone said the wake phrase and then this. Answer it."""
+    attention.touch()
     conf = service.config
     was_playing = music.PLAYER.state == "playing"
     if was_playing and conf.get("listen", {}).get("pause_music", True):
@@ -1311,11 +1550,18 @@ def _home_command(text, how):
     done, or None. Never raises — a failure is something to say. Something
     about the other PiE-inks ("show me the camera from upstairs") is
     answered the same way, from here."""
+    text = pitato.plain_name(text)                   # ("put the clock on the pietato": the name it had first, below)
+    done = _mood_command(text, how)                  # "I'm bored", "it's dark in here" — and "yes" to what it suggested
+    if done is not None:
+        return done
     try:
         done = home.HOME.handle(text)
     except Exception as e:
         log.warning("home command '%s' (%s) failed: %s", text, how, e)
         return f"Couldn't — {str(e)[:100]}."
+    if done is not None:
+        return done
+    done = _pitato_screen_command(text, how)         # "show the time on the pitato": its screen, before the other Pis
     if done is not None:
         return done
     done = _mesh_command(text, how)
@@ -1324,7 +1570,141 @@ def _home_command(text, how):
     done = _camera_command(text, how)
     if done is not None:
         return done
-    return _photo_command(text, how)
+    done = _photo_command(text, how)
+    if done is not None:
+        return done
+    done = _reminder_command(text, how)
+    if done is not None:
+        return done
+    done = _notebook_command(text, how)
+    if done is not None:
+        return done
+    done = _shelf_command(text, how)
+    if done is not None:
+        return done
+    if doing.asked(text):                            # "what are you doing?": the true answer, no model needed
+        if pet.is_question(text):                    # "are you busy?": the head answers too, a moment behind
+            threading.Thread(target=_head_too, args=(text,), daemon=True, name="pet-head-too").start()
+        return doing.sentence(service.config)
+    return None
+
+
+# -- how you feel: "I'm bored" (a game on the Pietato, or the TV), "it's dark in here" (the lights) ------------
+
+_offer = {}                                       # what the bot just suggested: {"kind": "game"|"tv", "game", "until", "had"}
+
+
+def _tv_there():
+    try:
+        return home.HOME.enabled() and home.HOME.ready() and bool(home.HOME._tv())
+    except Exception:
+        return False
+
+
+def _pick_game(games, had=()):
+    import random
+    fresh = [g for g in games if (g["ip"], g["path"]) not in had] or games
+    return random.choice(fresh) if fresh else None
+
+
+def _start_game(g):
+    okay, why = shelf.show_on_pitato(g)
+    host = g.get("host") or "the Pietato"
+    return f"Starting {g['title']} on {host} — have fun!" if okay else f"{host} wouldn't start it — {why}."
+
+
+def _suggest_game(games, tv):
+    g = _pick_game(games, _offer.get("had", set()))
+    had = set(_offer.get("had", set())) | {(g["ip"], g["path"])}
+    _offer.clear()
+    _offer.update(kind="game", game=g, until=time.time() + moods.OFFER_FOR, had=had, tv=tv)
+    system = g["path"].split("/")[0] if "/" in g["path"] else ""
+    where = g.get("host") or "the Pietato"
+    return (f"How about {g['title']}" + (f" ({system})" if system and len(system) <= 12 else "") + f" on {where}? "
+            "Say yes and I'll start it, or 'another' for a different one" + (" — or I can put the TV on." if tv else "."))
+
+
+def _lights_on():
+    """"It's dark in here": this room's lights on (or up to full, when they're on already)."""
+    conf = service.config
+    lights = [(name, eid) for name, eid, domain in home.HOME.named() if domain == "light"]
+    picked, ask = moods.room_lights(lights, (conf.get("me", {}).get("location") or "").strip())
+    if not picked:
+        return f"I'd put the lights on, but {ask}."
+    ids = [eid for _, eid in picked]
+    states = {x.get("entity_id"): x for x in home.HOME.states(force=True)}
+    off = [eid for eid in ids if (states.get(eid) or {}).get("state") != "on"]
+    names = ", ".join(n for n, _ in picked)
+    if off:
+        okay, why = home.HOME.call("light", "turn_on", {"entity_id": off})
+        lit = ", ".join(n for n, eid in picked if eid in off)
+        return f"Let there be light — {lit} on." if okay else f"Couldn't put the lights on — {why}."
+    okay, why = home.HOME.call("light", "turn_on", {"entity_id": ids, "brightness_pct": 100})
+    return f"{names} {'is' if len(picked) == 1 else 'are'} on already — turned up full." if okay else f"Couldn't — {why}."
+
+
+def _mood_command(text, how):
+    """What you said about how you feel, acted on — or the answer to what the bot just suggested.
+    None when it wasn't either (the model answers as usual)."""
+    try:
+        if _offer and time.time() < _offer.get("until", 0):
+            reply = moods.answer(text)
+            if reply:
+                kind = _offer.get("kind")
+                if reply == "no":
+                    _offer.clear()
+                    return "Fair enough. I'm here if you change your mind."
+                if reply == "tv" and _offer.get("tv"):
+                    _offer.clear()
+                    return home.HOME.act(("tv_power", "on"), label="the TV, for something to do")
+                if reply == "another" and kind == "game":
+                    games = shelf.games()
+                    if games:
+                        return _suggest_game(games, _offer.get("tv"))
+                if reply == "yes":
+                    g = _offer.get("game")
+                    _offer.clear()
+                    if kind == "game" and g:
+                        return _start_game(g)
+                    if kind == "tv":
+                        return home.HOME.act(("tv_power", "on"), label="the TV, for something to do")
+        elif _offer:
+            _offer.clear()
+        intent = moods.parse(text)
+        if not intent:
+            return None
+        if intent["kind"] == "dark":
+            if not (home.HOME.enabled() and home.HOME.ready()):
+                return None                              # no lights to reach: the model can say something kind
+            return _lights_on()
+        games = shelf.games()
+        if intent["kind"] == "random_game":
+            who = intent.get("who")
+            if who and who not in ("pitato", "pitatos"):
+                games = [g for g in games if who in ((g.get("host") or "").lower(), g.get("ip"))]
+            if not games:
+                return "There are no games in a Pietato's Games folder that I can see."
+            _offer.clear()
+            return _start_game(_pick_game(games))
+        tv = _tv_there()                                  # bored
+        if games:
+            return "Bored? " + _suggest_game(games, tv)
+        if tv:
+            _offer.clear()
+            _offer.update(kind="tv", until=time.time() + moods.OFFER_FOR, tv=True)
+            return "Bored? I can put the TV on — say yes."
+        return None
+    except Exception as e:
+        log.warning("mood '%s' (%s): %s", text, how, e)
+        return None
+
+
+def _head_too(text):
+    try:
+        conf = service.config
+        pet.answer(conf, text, mascot.context(conf, day=_day()), persona=mascot.system_prompt(conf))
+    except Exception:
+        log.debug("pet: no head answer", exc_info=True)
 
 
 # -- the other PiE-inks, as a mesh -----------------------------------------------------------
@@ -1337,10 +1717,124 @@ def _mesh_command(text, how):
         intent = mesh.parse(text)
         if not intent:
             return None
-        return _mesh_do(intent, friends.peers(), how)
+        peers = _everyone_for_mesh()
+        wanted = shelf.parse(text) if intent.get("who") else None
+        if wanted and (wanted["kind"] == "pitato" or mesh.resolve(peers, intent["who"]) is None):
+            return None          # "put the film on the pitato", "the picture of whiskers": a thing on the shelves, not a Pi
+        return _mesh_do(intent, peers, how)
     except Exception as e:
         log.warning("mesh command '%s' (%s) failed: %s", text, how, e)
         return f"Couldn't — {str(e)[:100]}."
+
+
+def _drawing_now():
+    """The drawing as it stands: the colour painting when the main screen is colour (or the LCD's is the one
+    being drawn), else the e-ink drawing. None if there's nothing drawn yet."""
+    from PIL import Image
+    from pie_ink.modes.simple import ImageMode
+    if service.panel.colour:
+        img = PAINT.image()
+        if img is not None:
+            return img
+    img = ImageMode._current
+    if img is None:
+        try:
+            img = Image.open(ImageMode.PATH)
+            img.load()
+        except OSError:
+            img = None
+    return img if img is not None else PAINT.image()
+
+
+def _screen_named(word):
+    """One of the panel's screens by a word for it ("weather", "finance", "the book"), or None."""
+    from pie_ink.modes import MODES
+    w = " ".join((word or "").lower().replace("screen", " ").split())
+    w = re.sub(r"^(?:the|my)\s+", "", w)
+    name = SCREEN_WORDS.get(w, w)
+    if name in MODES and name not in ("off",):
+        return name
+    for mode in MODES.values():                       # by its label: "Finance", "System"...
+        if mode.label.lower() == w and mode.name != "off":
+            return mode.name
+    return None
+
+
+def _pitato_screen_do(kind, to=None, text="", image=None, name=None):
+    """(done, what to say): something put on a Pietato's screen."""
+    conf = service.config
+    if kind == "stop":
+        ts, _why = pitato_screen.targets(to)
+        stopped = any([pitato_screen.stop_clock(x["ip"]) for x in ts]) if ts else pitato_screen.stop_clock(None)
+        return True, "The Pietato's screen is no longer kept up to date." if stopped else "Nothing was being kept on the Pietato."
+    if kind == "screen":
+        from pie_ink.modes import MODES
+        screen = _screen_named(name or "")
+        if screen is None:
+            return False, f"There's no '{name}' screen."
+        if screen == "image":
+            return _pitato_screen_do("drawing", to)
+        if screen == "message":
+            return _pitato_screen_do("message", to)
+        return pitato_screen.send_screen(screen, conf, to, label=f"The {MODES[screen].label.lower()} screen")
+    if kind == "clock":
+        return pitato_screen.send_clock(conf.get("clock", {}), to)
+    if kind == "message":
+        if not text:
+            text = (conf.get("message", {}).get("text") or "").strip()
+        return pitato_screen.send_message(text, to, conf.get("message", {}).get("font") or "Font.ttc")
+    if kind == "drawing":
+        img = image if image is not None else _drawing_now()
+        if img is None:
+            return False, "There's no drawing yet — draw something in the Draw tab first."
+        return pitato_screen.send_drawing(img, to)
+    return False, "That isn't something I can put on the Pietato."
+
+
+def _pitato_screen_command(text, how):
+    try:
+        intent = pitato_screen.parse(text)
+        if not intent:
+            return None
+        if intent["kind"] == "screen":
+            if not _screen_named(intent.get("what")):
+                return None              # "show the holiday video on the pitato": a thing on its shelves, not a screen
+            okay, said = _pitato_screen_do("screen", intent["to"], name=intent["what"])
+            return said
+        okay, said = _pitato_screen_do(intent["kind"], intent["to"], intent.get("text", ""))
+        return said
+    except Exception as e:
+        log.warning("pitato screen '%s' (%s) failed: %s", text, how, e)
+        return f"Couldn't — {str(e)[:100]}."
+
+
+@app.get("/api/pitato/screens")
+def api_pitato_screens():
+    """The Pietatos whose screen can be used, and whether the time is being kept on each."""
+    return ok(screens=[{**s, "clock": pitato_screen.clock_on(s["ip"]), "showing": pitato_screen.keeping(s["ip"])}
+                       for s in pitato_screen.screens()])
+
+
+@app.post("/api/pitato/show")
+def api_pitato_show():
+    """{kind: drawing | message | clock | screen | stop, to?, text?, image?, name? (the screen, for kind screen)}:
+    on a Pietato's screen, full screen."""
+    body = request.get_json(silent=True) or {}
+    kind = body.get("kind") or ""
+    image = None
+    if kind == "drawing" and body.get("image"):
+        try:
+            image = _image_from(body["image"])
+            image.load()
+        except Exception as e:
+            return fail(f"that is not a picture ({str(e)[:60]})")
+    okay, said = _pitato_screen_do(kind, body.get("to"), (body.get("text") or "").strip(), image, body.get("name"))
+    return ok(said=said) if okay else fail(said)
+
+
+def _everyone_for_mesh():
+    """The other PiE-inks, and a Pietato's cameras (they answer the same calls)."""
+    return friends.peers() + pitato.PITATO.peers()
 
 
 def _mesh_do(intent, peers, how):
@@ -1352,7 +1846,12 @@ def _mesh_do(intent, peers, how):
     kind = intent["kind"]
     roll = "\n".join(mesh.describe(p) for p in peers)
     if kind == "list":
-        return ("PiE-inks I can see:\n" + roll) if peers else "No other PiE-ink on the network right now."
+        lines = pitato.PITATO.describe()                       # the handheld Pi, when it's about
+        if not peers and not lines:
+            return "No other PiE-ink on the network right now — this is the whole house."
+        return ("The other rooms of the house (PiE-inks of yours — I'm the same bot on each):\n" + roll if peers
+                else "No other PiE-ink on the network right now — this is the whole house.") \
+            + ("\n" + "\n".join(lines) if lines else "")
     if kind == "find":
         cap = intent["cap"]
         label = mesh.CAP_LABELS.get(cap, cap)
@@ -1371,6 +1870,8 @@ def _mesh_do(intent, peers, how):
         return f"I don't know a Pi called '{who}'." + (f" The ones I can see:\n{roll}" if peers else " No other PiE-ink is on the network right now.")
     where = (peer.get("caps") or {}).get("location") or ""
     name = f"{peer['host']}" + (f" ({where})" if where else "")
+    if peer.get("kind") == "pitato" and kind not in ("camera", "where"):
+        return f"{name} is a Pietato camera — I can look through it, nothing more."
     if kind == "camera":
         data, why = mesh.fetch_frame(peer)
         if not data:
@@ -1455,6 +1956,40 @@ for _pool in mining.MINERS.values():
     _pool.on_alert = _mining_alert
 
 
+# -- a Pietato: the handheld Pi shows up on the network -------------------------------------------
+
+def _pitato_hello(p, back):
+    """A Pietato just showed up (or came back after a while away): PiE-ink is thrilled — a
+    line on the bot's screen with a starry-eyed face, out loud, the events list, the agent,
+    and the bot's own words when it has a model."""
+    conf = service.config
+    name = p.get("name") or p["ip"]
+    if p.get("here"):                                           # the two of them on one Pi
+        text = ("My Pietato housemate is back, right here on this Pi!" if back
+                else "A Pietato! It's right here with me, on this very Pi — hello, housemate!")
+    else:
+        text = (f"{name} is back! My Pietato friend is on the network again." if back
+                else f"A Pietato! {name} just showed up on the network — hello, friend!")
+    entry = sight.log_event(text, kind="pitato", level="info", source="pitato")
+    try:
+        agent.AGENT.noticed(entry)
+    except Exception:
+        pass
+    llm_conf = conf.get("llm", {})
+    chat.add("bot", text, "remark")
+    llm.set_speech(text, "pitato")
+    if llm_conf.get("enabled") and (llm_conf.get("model") or "").strip() and not llm.busy():
+        before = llm.latest()["ts"]
+        if mascot.ask(conf, day=_day(), topic="pitato_back" if back else "pitato", history=chat.history(6)):
+            threading.Thread(target=_note_remark, args=(before,), daemon=True).start()   # its own words follow
+    elif conf.get("audio", {}).get("speak_bot", True):
+        audio.say(text, conf.get("audio", {}))
+    service.poke()
+
+
+pitato.PITATO.on_arrive = _pitato_hello
+
+
 # -- your crypto: past the line, a crash, a rally -------------------------------------------------
 
 def _holdings_alert(kind, text, data, only_bot=False):
@@ -1472,7 +2007,7 @@ def _holdings_alert(kind, text, data, only_bot=False):
         except Exception:
             pass
         if hconf.get("notify", True):
-            _tg_notify(f"Crypto: {text}")
+            _tg_notify(f"Finance: {text}")
         if not hconf.get("comment", True):
             service.poke()
             return
@@ -1494,6 +2029,7 @@ holdings.HOLDINGS.on_alert = _holdings_alert
 # -- the camera that turns --------------------------------------------------------------------
 
 ptz.PTZ.configure(service.config.get("ptz", {}))
+camera.CAMERA.configure(service.config.get("camera", {}))     # a camera with two lenses: which view, swapped
 
 
 def _follow_saved(on):
@@ -1695,6 +2231,287 @@ def _photo_command(text, how):
         with open(photos.path_of(got["name"]), "rb") as fh:
             return (fh.read(), f"Took {what} — it's kept on the Pi too (Camera tab).")
     return f"Took {what} — it's with your photos on the Camera tab."
+
+
+# -- the notebook and the reminders: what you tell it to keep, and when to tell you ---------------------------
+
+def _notebook_command(text, how):
+    """"Remember that…", "forget…", "what do you remember?": done, or None if it wasn't that."""
+    intent = notebook.parse(text)
+    if not intent:
+        return None
+    return notebook.do(intent, how)
+
+
+def _reminder_command(text, how):
+    """"Remind me in 20 minutes to…", "set a timer for 5 minutes", "what reminders do I have",
+    "cancel the timer", "snooze": done, or None if it wasn't that."""
+    intent = reminders.parse(text)
+    if not intent:
+        return None
+    return reminders.REMINDERS.do(intent, how)
+
+
+def _reminder_card(text, kind="Reminder"):
+    """The reminder as a card for the panel: the kind up top, the words large underneath."""
+    from PIL import Image, ImageDraw
+    from pie_ink.text import font, wrap, draw_block, line_height
+    info = service.panel.info()
+    pw, ph = max(200, int(info.get("width", 250))), max(100, int(info.get("height", 122)))
+    T = max(1.0, min(1.6, 1 + (min(pw / 250, ph / 122) - 1) * 0.5))
+    w, h = pw * 3, (ph - round(14 * T) - 2) * 3                  # the room above the postcard's footer, exactly
+    img = Image.new("L", (w, h), 255)
+    d = ImageDraw.Draw(img)
+    head = font(2, round(13 * T) * 3)
+    d.text((12, 6), kind.upper(), font=head, fill=0)
+    top = line_height(head) + 12
+    d.line([(0, top), (w, top)], fill=0, width=3)
+    box = (6, top + 6, w - 6, h - 4)
+    size = round(26 * T) * 3
+    while size > 36:
+        f = font(1, size)
+        if len(wrap(d, text, f, box[2] - box[0] - 8)) * line_height(f) <= box[3] - box[1] - 8:
+            break
+        size -= 3
+    draw_block(d, text, font(1, size), box, 0, align="left", valign="top")
+    return img
+
+
+def _reminder_due(r):
+    """One has come round: the card on the panel for a couple of minutes, out loud, your phone,
+    the events list, the conversation — and the bot's screen."""
+    conf = service.config
+    text = reminders.REMINDERS.due_words(r)
+    kind = "Timer" if r["text"] == "timer" else "Wake up" if r["text"] == "wake up" else "Reminder"
+    entry = sight.log_event(text, kind="reminder", level="note", source="reminder")
+    try:
+        agent.AGENT.noticed(entry)
+    except Exception:
+        pass
+    chat.add("bot", text, "remark")
+    llm.set_speech(text, "reminder")
+    was = service.mode_name
+    try:
+        body = r["text"] if r["text"] not in ("timer", "wake up") else text
+        postcard.keep(_reminder_card(body, kind), "reminder", text, label=kind)
+        service.set_mode("postcard")
+        if was and was != "postcard":
+            def back():
+                if service.mode_name == "postcard":
+                    service.set_mode(was)
+            threading.Timer(reminders.SHOW_FOR, back).start()
+    except Exception:
+        log.exception("the reminder's card")
+    if conf.get("audio", {}).get("speak_bot", True):
+        audio.say(text, conf.get("audio", {}))
+    _tg_notify(f"⏰ {text}")
+    service.poke()
+
+
+reminders.REMINDERS.on_due = _reminder_due
+
+
+@app.get("/api/reminders")
+def api_reminders():
+    rs = reminders.REMINDERS
+    return ok(reminders=[{**r, "words": rs.describe(r)} for r in rs.pending()])
+
+
+@app.post("/api/reminders")
+def api_reminders_add():
+    """{text}: in your own words — "in 20 minutes check the oven", "tomorrow at 9 bins out"."""
+    text = ((request.get_json(silent=True) or {}).get("text") or "").strip()
+    if not text:
+        return fail("say when, and what")
+    intent = reminders.parse(text) or reminders.parse("remind me " + text)
+    if not intent or intent["kind"] != "set":
+        return fail("couldn't find a time in that — try 'in 20 minutes …' or 'at 5 pm …'")
+    reply = reminders.REMINDERS.do(intent, "page")
+    if intent.get("at") is None:
+        return fail(reply)
+    rs = reminders.REMINDERS
+    return ok(reply=reply, reminders=[{**r, "words": rs.describe(r)} for r in rs.pending()])
+
+
+@app.delete("/api/reminders/<rid>")
+def api_reminders_remove(rid):
+    rs = reminders.REMINDERS
+    rs.remove(rid)
+    return ok(reminders=[{**r, "words": rs.describe(r)} for r in rs.pending()])
+
+
+@app.get("/api/notes")
+def api_notes():
+    return ok(notes=notebook.notes())
+
+
+@app.post("/api/notes")
+def api_notes_add():
+    text = ((request.get_json(silent=True) or {}).get("text") or "").strip()
+    note = notebook.add(text, "page") if text else None
+    if not note:
+        return fail("say what to remember")
+    return ok(note=note, notes=notebook.notes())
+
+
+@app.delete("/api/notes/<nid>")
+def api_notes_remove(nid):
+    notebook.remove(nid)
+    return ok(notes=notebook.notes())
+
+
+# -- the shelves: photos, books, music here, and the Pietato's pictures, music, videos, documents -----------
+
+def _shelf_command(text, how):
+    """"Show me the latest photo", "find the song called blue monday", "play X on the
+    pitato", "what videos are there": done on whichever Pi has it, or None if it wasn't
+    that. From Telegram a picture comes back as (jpeg, caption)."""
+    try:
+        intent = shelf.parse(text)
+        if not intent:
+            return None
+        return _shelf_do(intent, how)
+    except Exception as e:
+        log.warning("shelf '%s' (%s) failed: %s", text, how, e, exc_info=True)
+        return f"Couldn't — {str(e)[:100]}."
+
+
+def _shelf_do(intent, how):
+    import io as _io
+    from PIL import Image
+    from pie_ink.modes.simple import ImageMode
+    conf = service.config
+    kind, words = intent["kind"], intent["words"]
+
+    def nowhere():                                           # worded once the shelves have been looked at
+        return ("on either Pi" if shelf.pitatos() else "here") + \
+            (" — the Pietato's page has a password, so its shelves are closed to me"
+             if any((shelf._cache.get(p["ip"]) or {}).get("locked") for p in shelf.pitatos()) else "")
+    if kind == "list":
+        kinds = shelf._kinds_in(words.split())
+        if intent.get("drive"):                              # "what's on the usb drive"
+            line = shelf.drive_summary(kinds or None)
+            if kinds:
+                newest = sorted((i for i in shelf.on_drives() if i["kind"] in kinds), key=lambda i: -(i.get("when") or 0))[:4]
+                if newest:
+                    line += " Newest: " + ", ".join(i["title"] for i in newest) + "."
+            return line
+        found = shelf.find(" ".join(kinds) if kinds else "latest", kinds=kinds, limit=400, config=conf)
+        if not found:
+            return f"Nothing like that {nowhere()}."
+        here_n = sum(1 for i in found if i["where"] == "here")
+        there_n = len(found) - here_n
+        newest = sorted(found, key=lambda i: -(i.get("when") or 0))[:5]
+        what = "/".join(sorted(kinds)) if kinds else "thing"
+        return (f"{len(found)} {what}{'s' if len(found) != 1 else ''}" + (f": {here_n} here, {there_n} on the Pietato" if there_n else " here")
+                + ". Newest: " + "; ".join(shelf.describe(i) for i in newest) + ".")
+    if kind == "find":
+        found = shelf.find(words, config=conf)
+        if not found:
+            return f"I couldn't find anything like '{words}' {nowhere()}."
+        lines = [shelf.describe(i) for i in found[:5]]
+        return (f"Found {len(found)}: " if len(found) > 1 else "Found it: ") + "; ".join(lines) + \
+            (". Say 'show me …' or 'play …' and I'll fetch it." if how != "telegram" else "")
+    if kind == "pitato":
+        if not shelf.pitatos():
+            return "There's no Pietato about to put it on."
+        found = shelf.find(words, config=conf)
+        if not found:
+            return f"I couldn't find anything like '{words}' {nowhere()}."
+        it = next((i for i in found if i["where"] == "pitato"), found[0])
+        if it["where"] == "pitato":
+            okay, why = shelf.show_on_pitato(it)
+            return f"{it['title']} is on the Pietato's screen." if okay else f"The Pietato wouldn't — {why}."
+        if it["kind"] in ("photo", "drawing"):
+            okay, why = shelf.send_to_pitato(it, shelf.fetch(it))
+            return f"Sent {it['title']} over — it's on the Pietato's screen (in its Pictures, under pie-ink)." if okay \
+                else f"Couldn't send it to the Pietato — {why}."
+        return f"{shelf.describe(it)} — it's here, not on the Pietato, and only pictures go across."
+    if kind == "play":
+        found = shelf.find(words, kinds={"music", "video", "game"} if not shelf._kinds_in(words.split()) else None, config=conf)
+        if not found and shelf._kinds_in(words.split()) == {"music"}:        # "play some music": whatever's here
+            found = shelf.find("music", kinds={"music"}, limit=1, config=conf)
+        if not found:
+            return f"I couldn't find anything like '{words}' to play {nowhere()}."
+        it = found[0]
+        if it.get("folder") == "drive" and it["kind"] == "music":
+            return _play_from_drive(it, conf)
+        if it["where"] == "here" and it["kind"] == "music":
+            mconf = {**conf.get("music", {}), **conf.get("audio", {})}
+            tracks = music.library(conf.get("music", {}))
+            index = next((k for k, t in enumerate(tracks) if t["path"] == it["path"]), None)
+            if index is None:
+                return "That song has gone from the music folder."
+            music.PLAYER.load(tracks, mconf)
+            music.PLAYER.play(index, mconf)
+            service.set_mode("music")
+            return f"Playing {it['title']}."
+        if it["where"] == "pitato" and it["kind"] == "game":
+            return _start_game(it)
+        if it["where"] == "pitato":
+            okay, why = shelf.show_on_pitato(it)
+            return f"Playing {it['title']} on the Pietato." if okay else f"The Pietato wouldn't — {why}."
+        return f"{shelf.describe(it)} — that isn't something I can play."
+    # show: a picture on the panel, a book in Read, a song playing, a video on the Pietato
+    found = shelf.find(words, config=conf)
+    if not found:
+        return f"I couldn't find anything like '{words}' {nowhere()}."
+    it = found[0]
+    if it["kind"] in ("photo", "drawing"):
+        if it["where"] == "here" and it["folder"] == "drawing" and it["name"] == "drawing.png":
+            service.set_mode("image")
+            return "The drawing is on the panel."
+        data = shelf.fetch(it)
+        img = Image.open(_io.BytesIO(data)).convert("RGB")
+        label = f"{it['title']}" + (" · from the Pietato" if it["where"] == "pitato" else " · from the USB drive" if it["folder"] == "drive" else "")
+        postcard.keep(img, (it.get("host") or "the Pietato") if it["where"] == "pitato" else "here", "", label=label)
+        llm.set_picture(img, it["title"])
+        service.set_mode("postcard")
+        if how == "telegram":
+            return (data if it["name"].lower().endswith((".jpg", ".jpeg")) else _as_jpeg(img), f"{shelf.describe(it)} — on the panel too.")
+        return f"{it['title']} is on the panel ({shelf.describe(it).split(' — ', 1)[1]})."
+    if it["kind"] == "book" or (it["kind"] == "document" and it["name"].lower().endswith(shelf.READABLE)):
+        if it["where"] == "here" and it.get("book"):
+            reading.open(it["book"])
+        else:
+            data = shelf.fetch(it, shelf.DOC_MAX)
+            book = reader.add(it["name"], data)
+            reading.open(book)
+        service.set_mode("reader")
+        return f"{it['title']} is open in Read" + (" (copied over from the Pietato)." if it["where"] == "pitato"
+                                                    else " (copied over from the USB drive)." if it["folder"] == "drive" else ".")
+    if it["kind"] == "music":
+        return _shelf_do({"kind": "play", "words": words}, how)
+    if it["where"] == "pitato":
+        okay, why = shelf.show_on_pitato(it)
+        return f"{it['title']} is on the Pietato's screen." if okay else f"The Pietato wouldn't — {why}."
+    return f"{shelf.describe(it)} — I can't show that kind of thing on the panel."
+
+
+def _play_from_drive(it, conf):
+    """A song on a USB drive: played from there, the drive's other songs around it as the playlist."""
+    if not it["name"].lower().endswith(music.KINDS):
+        return f"{shelf.describe(it)} — that's a kind of file I can't play."
+    songs = [i for i in shelf.on_drives() if i["kind"] == "music" and i.get("dev") == it.get("dev")
+             and i["name"].lower().endswith(music.KINDS)]
+    tracks = sorted(({"path": drives.path_in(i["root"], i["path"]), "title": i["title"], "size": i["size"],
+                      "folder": os.path.dirname(i["path"])} for i in songs), key=lambda t: (t["folder"].lower(), t["title"].lower()))
+    want = drives.path_in(it["root"], it["path"])
+    index = next((k for k, t in enumerate(tracks) if t["path"] == want), None)
+    if index is None:
+        return "That song has gone from the USB drive."
+    mconf = {**conf.get("music", {}), **conf.get("audio", {})}
+    music.PLAYER.load(tracks, mconf)
+    music.PLAYER.play(index, mconf)
+    service.set_mode("music")
+    return f"Playing {it['title']} (from the USB drive{(' ' + it['drive']) if it.get('drive') else ''})."
+
+
+def _as_jpeg(img):
+    import io as _io
+    buf = _io.BytesIO()
+    img.save(buf, "JPEG", quality=88)
+    return buf.getvalue()
 
 
 @app.get("/api/photos")
@@ -1974,7 +2791,9 @@ def api_listen_stop():
 def _music_reply(**extra):
     conf = service.config.get("music", {})
     tracks = music.library(conf)
-    if [t["path"] for t in tracks] != [t["path"] for t in music.PLAYER.tracks]:
+    from_drive = bool(music.PLAYER.tracks) and all(os.path.isabs(t["path"]) for t in music.PLAYER.tracks) \
+        and music.PLAYER.state in ("playing", "paused")             # (songs off a USB drive: left playing)
+    if not from_drive and [t["path"] for t in tracks] != [t["path"] for t in music.PLAYER.tracks]:
         music.PLAYER.load(tracks, {**conf, **service.config.get("audio", {})})
     return ok(tracks=tracks, now=music.PLAYER.tick(), folder=music.folder(conf), **extra)
 
@@ -2307,33 +3126,61 @@ def api_draw_describe():
 
 @app.post("/api/llm/chat")
 def api_llm_chat():
+    """{message} — and, from a Pietato's Bot using this one, {image}: a picture as a data URL
+    or plain base64, which goes to the model with the words (a model that sees)."""
     body = request.get_json(silent=True) or {}
     message = (body.get("message") or "").strip()
-    if not message:
+    image = _picture_in(body.get("image"))
+    if not message and not image:
         return fail("say something first")
+    message = message or "What do you make of this picture?"
+    # from a Pietato's Bot page: the same bot, answering there — so it isn't also said out loud here
+    how = "pitato" if pitato.PITATO.is_pitato(request.headers.get("User-Agent")) else "typed"
     prior = chat.history()
-    chat.add("you", message, "typed")
-    text = _home_command(message, "typed")
+    chat.add("you", message + (" [sent a picture]" if image else ""), how)
+    text = _home_command(message, how) if not image else None
     if text is not None:                      # a home command, done: no bot needed
         llm.set_speech(text, "chat")
-        chat.add("bot", text, "typed")
-        if service.config.get("audio", {}).get("speak_bot") and service.config.get("home", {}).get("say_back", True):
+        chat.add("bot", text, how)
+        if how != "pitato" and service.config.get("audio", {}).get("speak_bot") and service.config.get("home", {}).get("say_back", True):
             audio.say(text, service.config.get("audio", {}))
         service.poke()
         return ok(reply=text, speech=llm.latest(), history=chat.history(), home=True)
     try:
-        text = mascot.reply(service.config, message, day=_day(), history=prior)
+        text = mascot.reply(service.config, message, day=_day(), history=prior, image=image)
     except ValueError as e:
         log.info("chat refused: %s", e)          # shows up in journalctl, not just the page
         return fail(str(e))
     except Exception as e:
         log.warning("chat failed: %s", e)
         return fail(str(e)[:140], 502)
-    if service.config.get("audio", {}).get("speak_bot"):
+    if how != "pitato" and service.config.get("audio", {}).get("speak_bot"):
         audio.say(text, service.config.get("audio", {}))
-    chat.add("bot", text, "typed")
+    chat.add("bot", text, how)
     service.poke()
-    return ok(reply=text, speech=llm.latest(), history=chat.history())
+    head = pet.status()                              # what its head did with this question, if it was one
+    return ok(reply=text, speech=llm.latest(), history=chat.history(),
+              head=head if head.get("question") == message.strip()[:120] and head.get("ago", 999) < 60 else None)
+
+
+def _picture_in(value):
+    """A picture sent with a message: base64 (a data URL or bare), checked to be one, no bigger
+    than a few MB; None otherwise."""
+    import base64 as _b64
+    import io as _io
+    from PIL import Image
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.split(",", 1)[1] if value.startswith("data:") and "," in value else value
+    if len(raw) > 12_000_000:
+        return None
+    try:
+        data = _b64.b64decode(raw, validate=False)
+        with Image.open(_io.BytesIO(data)) as im:
+            im.verify()
+    except Exception:
+        return None
+    return _b64.b64encode(data).decode()
 
 
 # -- weather -------------------------------------------------------------------
@@ -2366,19 +3213,13 @@ def api_weather_place():
 
 @app.post("/api/weather/locate")
 def api_weather_locate():
-    """Find me: the GPS's fix if it has one, else where the Pi's internet address says it is."""
-    pos = gps.GPS.position() if gps.GPS.running() else None
-    if pos is not None:
-        label, country = gps.place_name(*pos)
-        patch = {"lat": round(pos[0], 4), "lon": round(pos[1], 4), "location": label or f"{pos[0]:.3f}, {pos[1]:.3f}",
-                 "country": country or "", "source": "gps"}
-    else:
-        cache.clear("ip_location")               # asked for: look afresh, even after a failed try
-        cache.clear("ip_location__fail")
-        loc = locate.from_network()
-        if not loc:
-            return fail("couldn't tell where this Pi is — no GPS fix, and the network lookups didn't answer")
-        patch = {"lat": loc["lat"], "lon": loc["lon"], "location": loc["place"], "country": loc["country"], "source": "network"}
+    """Find me: where the Pi's internet address says it is."""
+    cache.clear("ip_location")                   # asked for: look afresh, even after a failed try
+    cache.clear("ip_location__fail")
+    loc = locate.from_network()
+    if not loc:
+        return fail("couldn't tell where this Pi is — the network lookups didn't answer")
+    patch = {"lat": loc["lat"], "lon": loc["lon"], "location": loc["place"], "country": loc["country"], "source": "network"}
     config = service.apply_settings({"weather": patch})
     _weather_prefetch(patch["lat"], patch["lon"], config["weather"].get("units", "F"))
     return ok(location=patch["location"], source=patch["source"], lat=patch["lat"], lon=patch["lon"])
@@ -2396,55 +3237,20 @@ def _weather_prefetch(lat, lon, units):
     threading.Thread(target=go, daemon=True).start()
 
 
-# -- the GPS receiver ------------------------------------------------------------------------
-
-_gps_applied = None          # the last position the weather was moved to
-
-
-def _gps_conf(config):
-    conf = dict(config.get("gps", {}))
-    if os.environ.get("PIE_INK_DRIVER") == "mock" and conf.get("device", "auto") == "auto" and gps.mode(conf) == "on":
-        conf["device"] = "mock"                  # a pretend receiver where there is no USB — only when asked for one
-    return conf
-
-
-def _gps_fix(state):
-    """A fresh position from the receiver: name the place (once per spot)
-    and, if asked, move the weather there."""
-    global _gps_applied
-    here = (state["lat"], state["lon"])
-    try:
-        journey.JOURNEY.record(state)            # the day's track, a point every few metres
-    except Exception:
-        log.debug("journey point", exc_info=True)
-    if _gps_applied and gps.distance_km(here, _gps_applied) < 1.0:
-        return                                   # still the same place
-    label, country = gps.place_name(*here)
-    gps.GPS.place = label
-    _gps_applied = here
-    if service.config.get("gps", {}).get("set_weather", True):
-        w = service.config.get("weather", {})
-        patch = {"lat": round(here[0], 4), "lon": round(here[1], 4), "source": "gps",
-                 "location": label or f"{here[0]:.3f}, {here[1]:.3f}", "country": country or w.get("country", "")}
-        config = service.apply_settings({"weather": patch})
-        _weather_prefetch(patch["lat"], patch["lon"], config["weather"].get("units", "F"))
-        log.info("gps: the weather is now for %s", patch["location"])
-
+# -- where the Pi is, without being told ------------------------------------------------------
 
 def _auto_locate():
-    """Nothing typed in and no GPS fix: the Pi's internet address says roughly
-    where it is, and the weather goes there. A location that came from the
-    network before is checked again (the Pi may have moved house); one you
-    typed, or the GPS's, is left alone. Returns the patch applied, or None."""
+    """Nothing typed in: the Pi's internet address says roughly where it is,
+    and the weather goes there. A location that came from the network before
+    is checked again (the Pi may have moved house); one you typed is left
+    alone. Returns the patch applied, or None."""
     w = service.config.get("weather", {})
     if w.get("lat") is not None and w.get("source") != "network":
         return None
-    if gps.GPS.running() and gps.GPS.position() is not None:
-        return None                              # the receiver knows better, and the fix handler has it
     loc = locate.from_network()
     if not loc:
         return None
-    if w.get("lat") is not None and gps.distance_km((float(w["lat"]), float(w["lon"])), (loc["lat"], loc["lon"])) < locate.MOVED_KM:
+    if w.get("lat") is not None and locate.distance_km((float(w["lat"]), float(w["lon"])), (loc["lat"], loc["lon"])) < locate.MOVED_KM:
         return None                              # the same place as before
     patch = {"lat": loc["lat"], "lon": loc["lon"], "location": loc["place"], "country": loc["country"] or w.get("country", ""),
              "source": "network"}
@@ -2452,47 +3258,6 @@ def _auto_locate():
     _weather_prefetch(patch["lat"], patch["lon"], config["weather"].get("units", "F"))
     log.info("the weather is now for %s (from the Pi's internet address)", patch["location"])
     return patch
-
-
-gps.GPS.on_fix = _gps_fix
-
-
-@app.get("/api/gps")
-def api_gps():
-    return ok(status=gps.GPS.status(), devices=gps.candidates())
-
-
-@app.get("/api/gps/probe")
-def api_gps_probe():
-    """Why isn't the receiver working: the USB bus, the ports, who else might
-    be reading them, and what they say — with a verdict. Pauses the reader
-    for the few seconds it listens."""
-    if not gps.GPS.running():
-        gps.GPS.conf = _gps_conf(service.config)
-    report = gps.probe()
-    return ok(text=gps.probe_text(report), verdict=report["verdict"], status=gps.GPS.status())
-
-
-# -- the journey: where it has been -----------------------------------------------------------
-
-@app.get("/api/journey")
-def api_journey():
-    """A day's track (today unless ?day=YYYY-MM-DD), thinned for the page,
-    with its numbers and a sentence about it."""
-    day = (request.args.get("day") or "").strip() or journey.today()
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
-        return fail("which day? YYYY-MM-DD")
-    pts = journey.JOURNEY.points(day)
-    units = service.config.get("weather", {}).get("units", "F")
-    return ok(day=day, today=journey.today(), days=journey.JOURNEY.days(), points=journey.simplify(pts),
-              stats=journey.stats(pts), summary=journey.summary(day, units, pts), status=journey.JOURNEY.status())
-
-
-@app.delete("/api/journey")
-def api_journey_clear():
-    day = (request.args.get("day") or "").strip() or journey.today()
-    journey.JOURNEY.clear(day)
-    return ok(days=journey.JOURNEY.days())
 
 
 # -- what the camera has seen ------------------------------------------------------------------
@@ -2558,9 +3323,9 @@ def api_agent_clear():
 @app.get("/api/mesh")
 def api_mesh():
     """The PiE-inks and what each has, in words and in fields."""
-    peers = friends.peers()
+    peers = _everyone_for_mesh()
     return ok(me={**friends.me(), "caps": mesh.my_caps(service.config)},
-              pis=[{**p, "words": mesh.describe(p)} for p in peers])
+              pis=[{**p, "words": mesh.describe(p)} for p in peers], pitatos=pitato.PITATO.describe())
 
 
 # -- the miners: Duino-Coin and Verus ------------------------------------------------------------
@@ -2607,24 +3372,130 @@ def api_weather():
     return ok(data=data, location=w.get("location"))
 
 
+# -- what this Pi has fetched already, for the other Pis on the network -----------------------
+
+SHARE_POINTS = 500                 # a chart handed to another Pi: thinned to this many prices at most
+STOCK_RANGES = (1, 7, 30, 90, 180, 365)   # a share's charts, each cut from the prices Yahoo gave (pie_ink/stocks.py)
+
+
+def _thin(values, most=SHARE_POINTS):
+    """A chart's prices, at most `most` of them (evenly picked, the newest always in), each to six figures:
+    the shape is all a chart needs, and the answer stays small however many ranges and coins there are."""
+    vals = [v for v in (values or []) if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if len(vals) > most:
+        step = (len(vals) - 1) / (most - 1)
+        vals = [vals[round(i * step)] for i in range(most)]
+    return [float(f"{v:.6g}") for v in vals]
+
+
+def _coin_graphs(coin_id):
+    """Every chart of a coin that's been fetched, whatever its range: [{"days", "v", "age"}], shortest first
+    ("v": the prices — the shape a Pietato shares its own charts in, and reads another's)."""
+    out = []
+    for key in cache.keys(f"hist_{coin_id}_"):
+        tail = key[len(f"hist_{coin_id}_"):]
+        if not tail.isdigit():
+            continue
+        graph, age = cache.read(key)
+        if graph and age is not None:
+            out.append({"days": int(tail), "v": _thin(graph), "age": round(age, 1)})
+    return sorted(out, key=lambda g: g["days"])
+
+
+def _stock_graphs(symbol):
+    """A share's charts for the usual ranges, each from the prices already fetched: [{"days", "v", "age"}]."""
+    out = []
+    for days in STOCK_RANGES:
+        age = stocks.history_age(symbol, days)
+        graph = stocks.price_history(symbol, days, cached_only=True) if age is not None else []
+        if graph:
+            out.append({"days": days, "v": _thin(graph), "age": round(age, 1)})
+    return out
+
+
+@app.get("/api/shared")
+def api_shared():
+    """What this Pi has already fetched from the internet, and how old each piece is,
+    so another Pi of yours on the same network (a Pietato, another PiE-ink) can use it
+    instead of fetching the same thing: the weather for the weather spot — now, the
+    hours ahead and the week — with the US worded forecast, and every coin and share
+    on the Finance tab with its charts, every range that's been fetched. Only what's in
+    the cache — nothing is fetched on the asker's behalf, and nothing here is yours (no
+    settings, no keys, no names, no amounts).
+
+      {"weather": {"lat", "lon", "units", "place", "country", "age", "data", "nws", "nws_age"} | null,
+       "coins": [{"id", "symbol", "name", "age", "data", "graph", "graph_days", "graph_age", "graphs"}, ...],
+       "stocks": [{"id", "symbol", "name", "age", "data", "graph", "graph_days", "graphs"}, ...]}
+
+    "age" is seconds since that piece came from the internet; each keeps its source's
+    own shape (pie_ink/weather.py's forecast — "hours": the next 24 from this one,
+    [{"time", "temp", "code", "rain", "is_day"}], "days": a week; pie_ink/coingecko.py's
+    coin; pie_ink/stocks.py's share). "graph" is the chart of the Finance tab's own range
+    ("graph_days"), as it always was; "graphs" is every range there is,
+    [{"days": 1 | 7 | 30 | 180 | 365..., "v": prices oldest first (500 at most), "age"}] — the shape a
+    Pietato shares its own charts in (and reads them in)."""
+    conf = service.config
+    out = {"at": time.time(), "weather": None, "coins": []}
+    w = conf.get("weather", {})
+    if w.get("lat") is not None and w.get("lon") is not None:
+        lat, lon, units = float(w["lat"]), float(w["lon"]), w.get("units", "F")
+        data = weather.fetch(lat, lon, units, cached_only=True)
+        age = weather.age(lat, lon, units)
+        if data and age is not None:
+            nws, nws_age = cache.read(f"nws_{lat:.3f}_{lon:.3f}")
+            out["weather"] = {"lat": lat, "lon": lon, "units": units, "place": w.get("location") or "",
+                              "country": w.get("country") or "", "age": round(age, 1), "data": data,
+                              "nws": nws or [], "nws_age": None if not nws else round(nws_age, 1)}
+    days = int(conf.get("crypto", {}).get("graph_days", 7) or 7)
+    for item in watchlist.load():
+        if watchlist.kind(item) != "crypto":                   # (a share's figures are Yahoo's: under "stocks" below)
+            continue
+        d = coingecko.coin_data(item["id"], cached_only=True)
+        age = coingecko.coin_age(item["id"])
+        if not d or d.get("seed") or age is None:              # bundled figures aren't a fetch
+            continue
+        graph, graph_age = cache.read(f"hist_{item['id']}_{days}")
+        out["coins"].append({"id": item["id"], "symbol": item.get("symbol", ""), "name": item.get("name", item.get("symbol", "")),
+                             "age": round(age, 1), "data": d, "graph": graph or [], "graph_days": days,
+                             "graph_age": None if not graph else round(graph_age, 1), "graphs": _coin_graphs(item["id"])})
+    out["stocks"] = []
+    for item in watchlist.load():
+        if watchlist.kind(item) != "stock":
+            continue
+        d = stocks.stock_data(item["id"], cached_only=True)
+        age = stocks.stock_age(item["id"])
+        if not d or age is None:
+            continue
+        out["stocks"].append({"id": item["id"], "symbol": item["id"], "name": d.get("name") or item.get("name", ""),
+                              "age": round(age, 1), "data": {k: v for k, v in d.items() if k != "today"},
+                              "graph": stocks.price_history(item["id"], days, cached_only=True) or [], "graph_days": days,
+                              "graphs": _stock_graphs(item["id"])})
+    return ok(**out)
+
+
 # -- friends: other PiE-inks on the network -----------------------------------
 
 @app.get("/api/friends")
 def api_friends():
-    return ok(me=friends.me(), friends=friends.peers())
+    """The other PiE-inks (the rooms of this house: the same bot there) — and the Pietatos about, with their cameras."""
+    pt = pitato.PITATO.status()
+    return ok(me=friends.me(), friends=friends.peers(), rooms=household.HOUSE.status(), pitatos=pt["pitatos"],
+              cameras=pitato.PITATO.peers(), excited=pt["excited"])
 
 
 # -- camera -------------------------------------------------------------------
 
 @app.get("/api/ptz")
 def api_ptz():
-    """A camera that turns: whether there is one, where it points, what it last saw."""
-    return ok(**ptz.PTZ.status())
+    """A camera that turns: whether there is one, where it points, what it last saw — and
+    whose camera this is (a Pietato's Camera tab names it from here)."""
+    return ok(**ptz.PTZ.status(), name=socket.gethostname(), server="PiE-ink")
 
 
 @app.post("/api/ptz/drive")
 def api_ptz_drive():
-    """The joystick: where the stick is (-1…1, right and up positive), a few times a second while held."""
+    """Turning at a speed (the arrow keys, a game controller): -1…1 each way, right and up
+    positive, a few times a second while held. A drag on the picture uses /ptz/set instead."""
     b = request.get_json(silent=True) or {}
     try:
         pos = ptz.PTZ.drive(b.get("vx", 0), b.get("vy", 0), sid=str(b.get("sid") or ""), seq=int(b.get("seq") or 0),
@@ -2809,13 +3680,16 @@ def api_camera_stream():
                     headers={"Cache-Control": "no-store"})
 
 
-# -- crypto watchlist ----------------------------------------------------------------
+# -- the watchlist: coins and shares ----------------------------------------------------------------
 
 def _with_prices(items):
+    """The watchlist for the page: each item with its kind, its price (in its own
+    money: $ for a coin, the exchange's currency for a share) and today's move."""
     out = []
     for i in items:
         q = watchlist.quote(i, cached_only=True)
-        out.append({**i, "price": q.get("price") if q else None,
+        out.append({**i, "kind": watchlist.kind(i), "price": q.get("price") if q else None,
+                    "money": (q.get("money") or "$") if q else "$", "exchange": (q.get("exchange") or "") if q else "",
                     "change_1d": (q.get("change") or {}).get("24h") if q else None})
     return out
 
@@ -2828,9 +3702,10 @@ def api_watchlist():
 
 @app.post("/api/watchlist")
 def api_watchlist_add():
+    """{id} a coin's CoinGecko id, or {id, kind: "stock"} a share's ticker."""
     body = request.get_json(silent=True) or {}
     try:
-        items = watchlist.add((body.get("id") or "").strip())
+        items = watchlist.add((body.get("id") or "").strip(), "stock" if body.get("kind") == "stock" else "crypto")
     except ValueError as e:
         return fail(str(e))
     return ok(items=_with_prices(items))
@@ -2854,7 +3729,7 @@ def api_watchlist_toggle(coin_id):
 
 @app.get("/api/holdings")
 def api_holdings():
-    """What your crypto is worth: the total, each coin, the week's readings, the peak, the line."""
+    """What you hold is worth: the total, each coin and share, the week's readings, the peak, the line."""
     if request.args.get("refresh"):
         holdings.HOLDINGS.refresh()
     return ok(**holdings.HOLDINGS.status())
@@ -2870,31 +3745,47 @@ def api_holdings_try():
     h = holdings.HOLDINGS
     v = h.value()
     if not v["items"]:
-        return fail("put in how much of each coin you hold first")
+        return fail("put in how much of each coin or share you hold first")
     total, line = v["total"], h.line() or 1000000.0
-    top = ", ".join(f"{r['symbol']} {holdings.money(r['value'])}" for r in v["items"][:3] if r.get("value"))
-    text = {"rich": f"Your crypto just passed {holdings.money(line)}: it's worth {holdings.money(max(total, line * 1.003))} now"
+    yours = holdings.whose(v)
+    plural = yours == "Your holdings"
+    are, have, they = ("are", "they have", "they are") if plural else ("is", "it has", "it's")
+    top = ", ".join(f"{r['symbol']} {holdings.money(r['value'])}" for r in v["items"][:3] if r.get("value") and r["symbol"] not in v.get("foreign", []))
+    text = {"rich": f"{yours} just passed {holdings.money(line)}: {they} worth {holdings.money(max(total, line * 1.003))} now"
                     + (f" ({top})" if top else "") + ". You're rich!",
-            "under": f"Your crypto has slipped back under {holdings.money(line)}: {holdings.money(min(total, line * 0.997))} now.",
-            "crash": f"The market is down: your crypto is worth {holdings.money(total)}, -{h.share():.0f}% today "
+            "under": f"{yours} {'have' if plural else 'has'} slipped back under {holdings.money(line)}: {holdings.money(min(total, line * 0.997))} now.",
+            "crash": f"The market is down: {yours.lower()} {are} worth {holdings.money(total)}, -{h.share():.0f}% today "
                      f"({holdings.signed(-total * h.share() / 100)}).",
-            "rally": f"The market is up: your crypto is worth {holdings.money(total)}, +{h.share():.0f}% today "
+            "rally": f"The market is up: {yours.lower()} {are} worth {holdings.money(total)}, +{h.share():.0f}% today "
                      f"({holdings.signed(total * h.share() / 100)}).",
-            "slump": f"Your crypto is {2 * h.share():.0f}% below the most it has been worth: {holdings.money(total)} now."}[kind]
+            "slump": f"{yours} {are} {2 * h.share():.0f}% below the most {have} been worth: {holdings.money(total)} now."}[kind]
     threading.Thread(target=_holdings_alert, args=(kind, text, v, True), daemon=True).start()
     return ok(text=text, model=bool(service.config.get("llm", {}).get("enabled") and (service.config.get("llm", {}).get("model") or "").strip()))
 
 
 @app.delete("/api/watchlist/<coin_id>")
 def api_watchlist_remove(coin_id):
-    return ok(items=_with_prices(watchlist.remove(coin_id)))
+    items = watchlist.remove(coin_id)
+    holdings.HOLDINGS.value()                   # the total without it, now (it may have been held)
+    return ok(items=_with_prices(items))
 
 
 @app.get("/api/coins/search")
 def api_coin_search():
+    """Coins (the local catalogue) and shares (Yahoo's lookup) that fit what was
+    typed — a ticker typed in capitals puts the shares first."""
     q = (request.args.get("q") or "").strip()
-    return ok(results=[{"id": c["id"], "symbol": c["display"], "name": c["name"], "rank": c.get("rank")}
-                       for c in coingecko.search(q, 10)])
+    coins = [{"id": c["id"], "symbol": c["display"], "name": c["name"], "rank": c.get("rank"), "kind": "crypto"}
+             for c in coingecko.search(q, 8)]
+    shares, note = [], ""
+    if len(q) >= 2:
+        try:
+            shares = stocks.search(q, 6)
+        except Exception as e:
+            note = f"couldn't ask about shares ({str(e)[:60]})"
+    first_shares = q.isupper() and len(q) <= 6
+    results = (shares + coins) if first_shares else (coins + shares)
+    return ok(results=results[:12], note=note)
 
 
 # -- system -------------------------------------------------------------------
@@ -2954,6 +3845,92 @@ def api_power():
     except OSError as e:
         return fail(str(e), 500)
     return ok(action=action)
+
+
+# -- bored: nothing from you for a while, and it plays Snake on the little screen ------------------
+
+def _not_bored():
+    """A touch while Snake is up out of boredom: back to the screen it had."""
+    if _bored["from"] is None:
+        return
+    _bored["from"], _bored["ended"] = None, time.time()
+    log.info("snake: someone's about — back to the %s screen", service.config.get("lcd", {}).get("screen"))
+    threading.Thread(target=_lcd_apply, args=(service.config,), daemon=True).start()
+
+
+def _bored_check():
+    """One look: long enough without a word, the model there, the little screen on and
+    showing something else — then Snake goes up. Returns True when it did."""
+    conf = service.config
+    sconf, lconf = conf.get("snake", {}), conf.get("lcd", {})
+    try:
+        minutes = float(sconf.get("bored_minutes", 0) or 0)
+    except (TypeError, ValueError):
+        minutes = 0
+    if _bored["from"] is not None:
+        if not lconf.get("enabled") or lconf.get("screen") == "snake" or minutes <= 0:
+            _bored["from"] = None                # picked by hand, or switched off: nothing to go back to
+        return False
+    if minutes <= 0 or not lconf.get("enabled") or service.panel.colour or lconf.get("screen") == "snake":
+        return False
+    if attention.idle_seconds() < minutes * 60:
+        return False
+    # only when the model is there — an error screen is no way to pass the time
+    if time.time() - _bored["checked"] > 300:
+        _bored["checked"] = time.time()
+        host = llm.base(conf.get("llm", {})) or llm.normalise(conf.get("llm", {}).get("backup_host") or llm.PI)
+        model = (sconf.get("model") or "tev1").strip()
+        models = llm.probe(conf.get("llm", {}), timeout=4, host=host)["models"]
+        _bored["there"] = any(m == model or m.split(":")[0] == model.split(":")[0] for m in models)
+        if not _bored["there"]:
+            log.info("snake: bored, but %s isn't on %s — not playing", model, host)
+    if not _bored["there"]:
+        return False
+    _bored["from"] = lconf.get("screen", "system")
+    log.info("snake: bored (%g min without a word) — playing on the little screen", minutes)
+    _lcd_apply(conf)
+    return True
+
+
+def _bored_loop():
+    while True:
+        time.sleep(20)
+        try:
+            _bored_check()
+        except Exception:
+            log.exception("bored loop")
+
+
+# -- config.yaml written by someone else (setup.sh, a hand edit): taken up while running -------------
+
+def _config_check():
+    """One look at config.yaml: changed since this process last read or wrote it,
+    the differences are applied as if they had been saved on the page. True when
+    something was taken up."""
+    if not cfg.changed_on_disk():
+        return False
+    fresh = cfg.load()
+    patch = cfg.diff(service.config, fresh)
+    if not patch:
+        cfg.mark_seen()                            # the same settings, written again (another copy of the app, say): nothing to do
+        return False
+    log.info("config.yaml changed on disk — taking up %s", ", ".join(sorted(patch)))
+    config = service.apply_settings(patch)
+    _after_settings(patch, config)
+    return True
+
+
+def _config_watch():
+    while True:
+        time.sleep(3)
+        try:
+            _config_check()
+        except Exception:
+            log.exception("config watch")
+
+
+attention.on_touch(_not_bored)                   # any touch while Snake is up out of boredom ends it
+doing.boredom = lambda: _bored                   # so "what are you doing?" can say it's passing the time
 
 
 def _chatter():
@@ -3025,8 +4002,7 @@ def _warm_up():
                 log.info("warm-up: weather %s", e)
         try:
             for item in watchlist.visible()[:4]:
-                coingecko.coin_data(item["id"])
-                coingecko.price_history(item["id"], int(conf.get("crypto", {}).get("graph_days", 7)))
+                watchlist.quote(item, int(conf.get("crypto", {}).get("graph_days", 7)))
         except Exception as e:
             log.info("warm-up: coins %s", e)
         try:
@@ -3048,6 +4024,8 @@ def _warm_up():
 
     threading.Thread(target=run, daemon=True, name="warm-up").start()
     threading.Thread(target=_chatter, daemon=True, name="chatter").start()
+    threading.Thread(target=_bored_loop, daemon=True, name="bored").start()
+    threading.Thread(target=_config_watch, daemon=True, name="config-watch").start()
 
 
 # How waitress is run. threads: each open camera stream keeps one busy, so a few more than
@@ -3090,7 +4068,7 @@ def _shutdown(signum, frame):
     """systemctl stop / Ctrl-C: put the panel to sleep and release the GPIO."""
     log.info("shutting down")
     try:
-        for stop in (ptz.PTZ.shutdown, lcd.SECOND.stop, gps.GPS.stop, whisplay.BOARD.stop):
+        for stop in (ptz.PTZ.shutdown, lcd.SECOND.stop, whisplay.BOARD.stop, gamepad.PADS.stop):
             try:
                 stop()
             except Exception:
@@ -3110,7 +4088,7 @@ if __name__ == "__main__":
     telegram.start(_tg_conf, _tg_command, _tg_paired, _tg_tap)
     start_lcd()
     start_board()
-    gps.GPS.start(_gps_conf(service.config))
+    start_gamepad()
     start_listening()
     start_watching()
     agent.AGENT.start(service.config.get("agent", {}))
@@ -3119,9 +4097,13 @@ if __name__ == "__main__":
     for _pool in ("duco", "verus"):
         mining.MINERS[_pool].start(service.config.get(_pool, {}))
     holdings.HOLDINGS.start(service.config.get("holdings", {}))
+    reminders.REMINDERS.start()
+    household.HOUSE.start()                        # your other PiE-inks: rooms of the one bot's house
+    plugs.PLUGS.start()                            # what's plugged into the USB ports: the bot's face when that changes
+    gestures.GESTURES.configure(service.config.get("gestures", {}))   # hand gestures, if they're switched on
 
     def _maybe_speak(text, kind):
-        if service.config.get("audio", {}).get("speak_bot") and kind != "chat" and not kind.startswith("buddy"):
+        if service.config.get("audio", {}).get("speak_bot") and kind not in ("chat", "gesture") and not kind.startswith("buddy"):
             audio.say(text, service.config.get("audio", {}))   # chat replies are spoken by their own route
     llm.on_new_line(_maybe_speak)
 

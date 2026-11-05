@@ -1,5 +1,8 @@
-"""Cryptogotchi: rotates through the watchlist with a face that reacts to
-sentiment, a price graph, rotating stats and headlines.
+"""Finance (the Cryptogotchi, with shares beside the coins): rotates through
+the watchlist with a face that reacts to sentiment, a price graph, rotating
+stats and headlines. A coin's page and a share's are laid out the same; where
+a share has no rank, supply or community vote, its exchange, volume, previous
+close and 52-week range take those places.
 
 Network fetches happen in a background thread; render() never blocks.
 """
@@ -18,7 +21,7 @@ from PIL import Image, ImageOps
 from .. import holdings, mining, watchlist
 from ..settings import ASSETS_DIR
 from ..text import font, text_width, wrap
-from .base import Mode
+from .base import Mode, prompt_name
 
 log = logging.getLogger(__name__)
 
@@ -30,13 +33,28 @@ FACES = {
     "sad": "(╥☁╥ )", "worried": "(°▃▃°)", "bored": "(-__-)",
     "sleep": "(⇀‿‿↼)", "sleep2": "(≖‿‿≖)",
 }
+
+
+def _usb_face():
+    """The bot's face while something just plugged into a USB port (or pulled out) is news, else None."""
+    try:
+        from .. import plugs
+        got = plugs.PLUGS.showing()
+    except Exception:
+        return None
+    return got["face"] if got else None
+
+
 QUOTES = ["In crypto, we trust.", "Crypto never sleeps", "TO THE MOON!",
           "Stay calm and HODL", "Buy the dip!"]
+STOCK_QUOTES = ["Time in the market.", "Buy low, sell high.", "Stonks!",
+                "Diamond hands.", "Hold steady."]
+STOCK_NEWS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
 # your miners, in the rotation: one item per pool that is on
 MINING_ITEMS = {"duco": {"id": "duino-coin", "symbol": "DUCO", "name": "Duino-Coin", "mining": "duco"},
                 "verus": {"id": "verus-mining", "symbol": "VRSC", "name": "Verus", "mining": "verus"}}
 # what you hold, as one more page: the total and how it has moved
-HOLDINGS_ITEM = {"id": "holdings", "symbol": "TOTAL", "name": "Your crypto", "holdings": True}
+HOLDINGS_ITEM = {"id": "holdings", "symbol": "TOTAL", "name": "What you hold", "holdings": True}
 HOT_QUOTES = ["It's getting kinda hot!", "Is it hot in here?", "I'm sweating a bit", "I am HOT!"]
 FEEDS = [
     "https://feeds.feedburner.com/CoinDesk",
@@ -92,14 +110,15 @@ def _cpu_temp():
 
 
 class CryptoMode(Mode):
-    name = "crypto"
-    label = "Crypto"
+    name = "crypto"                 # the section and screen keep their old name; the tab says Finance
+    label = "Finance"
 
     def __init__(self, config, panel=None):
         super().__init__(config, panel)
         self._quotes = {}
         self._news = []
         self._news_ts = 0
+        self._stock_news = {}       # a share's ticker -> (when, [headlines]): Yahoo's feed for it
         self._online = True
         self._online_ts = 0
         self._look = 0
@@ -168,18 +187,44 @@ class CryptoMode(Mode):
             if q:
                 self._quotes[item["id"]] = q
             self._stop.wait(0.5)
-        if self.settings.get("show_news", True) and time.time() - self._news_ts > NEWS_TTL:
-            self._fetch_news()
+        if self.settings.get("show_news", True):
+            if time.time() - self._news_ts > NEWS_TTL:
+                self._fetch_news()
+            if watchlist.kind(current) == "stock":           # the share on show gets its own headlines
+                at, _ = self._stock_news.get(current["id"], (0, []))
+                if time.time() - at > NEWS_TTL:
+                    self._fetch_stock_news(current["id"])
+
+    @staticmethod
+    def _titles(url):
+        r = requests.get(url, timeout=8, headers={"User-Agent": "pie-ink/2.0"})
+        root = ET.fromstring(r.content)
+        titles = [i.findtext("title", "").strip().upper() for i in root.iter("item")]
+        return [t for t in titles if t][:6]
 
     def _fetch_news(self):
         try:
-            r = requests.get(random.choice(FEEDS), timeout=8, headers={"User-Agent": "pie-ink/2.0"})
-            root = ET.fromstring(r.content)
-            titles = [i.findtext("title", "").strip().upper() for i in root.iter("item")]
-            self._news = [t for t in titles if t][:6]
+            self._news = self._titles(random.choice(FEEDS))
         except Exception as e:
             log.warning("news failed: %s", e)
         self._news_ts = time.time()
+
+    def _fetch_stock_news(self, symbol):
+        try:
+            titles = self._titles(STOCK_NEWS.format(symbol=symbol))
+        except Exception as e:
+            log.info("news for %s failed: %s", symbol, e)
+            titles = self._stock_news.get(symbol, (0, []))[1]
+        self._stock_news[symbol] = (time.time(), titles)
+        if len(self._stock_news) > 20:
+            for old in sorted(self._stock_news, key=lambda k: self._stock_news[k][0])[:10]:
+                del self._stock_news[old]
+
+    def _news_for(self, item):
+        """Headlines for the page on show: the share's own, or the crypto feeds'."""
+        if watchlist.kind(item) == "stock":
+            return self._stock_news.get(item["id"], (0, []))[1]
+        return self._news
 
     def _quote_for(self, item):
         q = self._quotes.get(item["id"])
@@ -203,6 +248,9 @@ class CryptoMode(Mode):
     # -- shared bits ------------------------------------------------------------
 
     def _pick_face(self, q, hot):
+        usb = _usb_face()                            # something just plugged into a USB port: that face, a while
+        if usb:
+            return usb
         t = int(time.time())
         flip = (t // 3) % 2 == 0
         if not self._online:
@@ -211,6 +259,20 @@ class CryptoMode(Mode):
             return FACES["hot"] if t % 2 == 0 else FACES["hot2"]
         if not q:
             return FACES["awake"]
+        if q.get("kind") == "stock":                              # no community vote: today's move sets the mood
+            ch = (q.get("change") or {}).get("24h")
+            if ch is None:
+                return FACES["awake"]
+            if ch <= -4:
+                return FACES["sad"]
+            if ch <= -1.5:
+                return FACES["worried"]
+            if ch >= 2:
+                self._look = (self._look + 1) % 5
+                return FACES["cool"] if self._look == 4 else (FACES["look_r_happy"] if flip else FACES["look_l_happy"])
+            if ch >= 0.3:
+                return FACES["look_r_happy"] if flip else FACES["look_l_happy"]
+            return FACES["look_r"] if flip else FACES["look_l"]
         up = float(q.get("sentiment_up") or 0)
         if up > 75:
             self._look = (self._look + 1) % 5
@@ -273,9 +335,16 @@ class CryptoMode(Mode):
         q = self._quote_for(item)
         return self._render_large(f, item, q, now, hot)
 
+    @staticmethod
+    def _is_stock(q):
+        return bool(q and q.get("kind") == "stock")
+
     # -- your crypto: what it is all worth ---------------------------------------------------------
 
     def _holdings_face(self, v, st, hot):
+        usb = _usb_face()                            # something just plugged into a USB port: that face, a while
+        if usb:
+            return usb
         t = int(time.time())
         flip = (t // 3) % 2 == 0
         if not self._online:
@@ -309,7 +378,9 @@ class CryptoMode(Mode):
 
         # header: what it is · how many coins · time (today's move sits in the middle, under the total)
         n = len(v["items"])
-        parts = ["YOUR CRYPTO", f"{n} COIN{'S' if n != 1 else ''}", datetime.now().strftime("%-I:%M %p")]
+        shares = any(r.get("kind") == "stock" for r in v["items"])
+        parts = ["YOUR HOLDINGS" if shares else "YOUR CRYPTO", f"{n} {'ITEM' if shares else 'COIN'}{'S' if n != 1 else ''}",
+                 datetime.now().strftime("%-I:%M %p")]
         widths = [text_width(draw, p, font12) for p in parts]
         gap = (f.width - 4 - sum(widths)) // max(1, len(parts) - 1)
         x = 2
@@ -319,7 +390,7 @@ class CryptoMode(Mode):
         draw.line([(0, g["hdr"]), (f.width, g["hdr"])], fill=fg, width=1)
 
         # prompt (left) and the total (right), as big as the right column allows
-        prompt = f"{self.settings.get('username', 'pi')}>"
+        prompt = f"{prompt_name(self.config)}>"
         ages = [r["age"] for r in v["items"] if r.get("age") is not None]
         if any(r.get("seed") for r in v["items"]):
             prompt += " old data"
@@ -445,6 +516,9 @@ class CryptoMode(Mode):
     # -- your miners: Duino-Coin, Verus -----------------------------------------------------
 
     def _mining_face(self, d, hot):
+        usb = _usb_face()                            # something just plugged into a USB port: that face, a while
+        if usb:
+            return usb
         t = int(time.time())
         flip = (t // 3) % 2 == 0
         if not self._online:
@@ -613,10 +687,16 @@ class CryptoMode(Mode):
         T = g["T"]
         font12 = font(1, round(12 * T))
         dec = int(q.get("decimals", 2)) if q else 2
+        stock = self._is_stock(q) or watchlist.kind(item) == "stock"
+        money = (q.get("money") or "$") if q else "$"
 
-        # header: name · symbol · rank · time, spread across the width
+        # header: name · symbol · rank (a share: its exchange) · time, spread across the width (whether a
+        # share's market is open is in the footer, where there's room for it)
         name = item["name"].upper() if len(item["name"]) <= 12 else ""
-        rank = f"RANK: {q.get('rank') if q else '-'}"
+        if stock:
+            rank = (q or {}).get("exchange") or "SHARE"
+        else:
+            rank = f"RANK: {q.get('rank') if q else '-'}"
         clock = datetime.now().strftime("%-I:%M %p")
         parts = [p for p in (name, item["symbol"], rank, clock) if p]
         widths = [text_width(d, p, font12) for p in parts]
@@ -628,7 +708,7 @@ class CryptoMode(Mode):
         d.line([(0, g["hdr"]), (f.width, g["hdr"])], fill=fg, width=1)
 
         # prompt (left) and price (right)
-        prompt = f"{self.settings.get('username', 'pi')}>"
+        prompt = f"{prompt_name(self.config)}>"
         stale = self._staleness(q)
         if stale:
             prompt += f" {stale}"
@@ -636,7 +716,7 @@ class CryptoMode(Mode):
         if q and q.get("price") is not None:
             base = 18 if dec > 10 else 20 if dec > 8 else 22 if dec > 6 else 25
             price_font = font(1, round(base * T))
-            price = _num(q["price"], dec, "$")
+            price = _num(q["price"], dec, money)
             d.text((f.width - 10 - text_width(d, price, price_font), g["hdr"] + 2), price, font=price_font, fill=fg)
         else:
             d.text((g["col"], g["hdr"] + 16 * T), "fetching…", font=font12, fill=fg)
@@ -650,9 +730,12 @@ class CryptoMode(Mode):
         if g["tall"] and q:
             # under the face/graph: supply and how fresh the numbers are
             small = font(1, round(11 * T))
-            lines = [f"Supply {_short(q.get('circulating_supply'))} of {_short(q.get('total_supply'))}"
-                     if q.get("total_supply") else f"Supply {_short(q.get('circulating_supply'))}",
-                     self._freshness(q)]
+            if stock:
+                lines = [f"Volume {_short(q.get('volume'), 1)} · Prev {_num(q.get('prev_close'), dec, money)}", self._freshness(q)]
+            else:
+                lines = [f"Supply {_short(q.get('circulating_supply'))} of {_short(q.get('total_supply'))}"
+                         if q.get("total_supply") else f"Supply {_short(q.get('circulating_supply'))}",
+                         self._freshness(q)]
             lh = round(13 * T)
             y = g["band"] - 6 - lh * len(lines)
             for line in lines:
@@ -667,26 +750,45 @@ class CryptoMode(Mode):
 
         if q:
             self._draw_quote(f, q, dec, hot, g)
-            self._draw_bottom(f, q, dec, g)
+            self._draw_bottom(f, q, dec, g, self._news_for(item))
 
-        # footer: ATH · date · % from ATH
+        # footer: ATH · date · % from ATH (a share: its 52-week high, whether its market is open, its
+        # 52-week low when there's room for that too, and how far under the high)
         d.line([(0, g["footer"]), (f.width, g["footer"])], fill=fg, width=1)
         if q:
             fy = g["footer"] + 1
-            d.text((5, fy), f"ATH: {_num(q.get('ath'), dec, '$')}", font=font12, fill=fg)
+            left = f"{'52W HIGH' if stock else 'ATH'}: {_num(q.get('ath'), dec, money)}"
+            d.text((5, fy), left, font=font12, fill=fg)
             pct = f"{_num(q.get('from_ath'))} %"
-            d.text((f.width - 5 - text_width(d, pct, font12), fy), pct, font=font12, fill=fg)
-            if dec <= 9 and q.get("ath_date"):
-                date = q["ath_date"]
-                d.text(((f.width - text_width(d, date, font12)) // 2 + 20, fy), date, font=font12, fill=fg)
+            px = f.width - 5 - text_width(d, pct, font12)
+            d.text((px, fy), pct, font=font12, fill=fg)
+            if stock:
+                state = "" if q.get("open") is None else ("OPEN" if q.get("open") else "CLOSED")
+                low = f"LOW {_num(q.get('low_52w'), dec, money)}" if q.get("low_52w") else ""
+                choices = [" · ".join(x for x in (state, low) if x), state, low]
+            else:
+                choices = [q.get("ath_date") if dec <= 9 else ""]
+            room_left, room_right = 5 + text_width(d, left, font12) + 8, px - 8
+            for middle in (c for c in choices if c):
+                tw = text_width(d, middle, font12)
+                if stock:                                    # in the middle of the room between the two
+                    x = room_left + (room_right - room_left - tw) // 2
+                else:
+                    x = max(room_left, min((f.width - tw) // 2 + 20, room_right - tw))
+                if x >= room_left and x + tw <= room_right:                         # only where it sits clear of both
+                    d.text((x, fy), middle, font=font12, fill=fg)
+                    break
         return f.image
 
     def _draw_quote(self, f, q, dec, hot, g):
         T = g["T"]
         fnt = font(1, round(12 * T))
-        n = len(QUOTES)
+        stock = self._is_stock(q)
+        money = q.get("money") or "$"
+        sayings = STOCK_QUOTES if stock else QUOTES
+        n = len(sayings)
         step = int(time.time() % (QUOTE_SECONDS * (n + 4)) // QUOTE_SECONDS)
-        quote = HOT_QUOTES[int(time.time() // QUOTE_SECONDS) % len(HOT_QUOTES)] if hot else QUOTES[step % n]
+        quote = HOT_QUOTES[int(time.time() // QUOTE_SECONDS) % len(HOT_QUOTES)] if hot else sayings[step % n]
         # how many lines fit between the price row and the bottom band
         top = g["hdr"] + 30 * T
         avail = g["band"] - 4 - top
@@ -696,6 +798,12 @@ class CryptoMode(Mode):
             # small panel: one rotating line, as before
             if hot:
                 text = quote
+            elif stock and step == 0:
+                text = f"Prev close: {_num(q.get('prev_close'), dec, money)}"
+            elif stock and step == 1:
+                text = f"Volume: {_short(q.get('volume'), 1)}"
+            elif stock and step == 2:
+                text = f"52w low: {_num(q.get('low_52w'), dec, money)}"
             elif step == 0:
                 text = f"Market Cap: ${_short(q.get('market_cap'))}"
             elif step == 1:
@@ -703,10 +811,10 @@ class CryptoMode(Mode):
             elif step == 2:
                 text = f"Total Supply: {_short(q.get('total_supply'))}"
             elif step == 3:
-                text = (f"High: {_num(q.get('day_high'), dec, '$')}\n"
-                        f"Low: {_num(q.get('day_low'), dec, '$')}")
+                text = (f"High: {_num(q.get('day_high'), dec, money)}\n"
+                        f"Low: {_num(q.get('day_low'), dec, money)}")
             else:
-                text = QUOTES[(step - 4) % n]
+                text = sayings[(step - 4) % n]
             f.draw.multiline_text((g["col"], g["quote_y"]), text, font=fnt, fill=f.fg)
             return
         # bigger panel: a block of stats, spread evenly over the space, quote last
@@ -714,13 +822,22 @@ class CryptoMode(Mode):
         room = f.width - g["col"] - 4
         # each stat has a long and a short form; use the longest that fits the column
         lo, hi = q.get("day_low"), q.get("day_high")
-        stats = [
-            (f"Market cap  ${_short(q.get('market_cap'))}", f"Mcap ${_short(q.get('market_cap'))}"),
-            (f"24h  {_num(lo, dec, '$')} – {_num(hi, dec, '$')}",
-             f"24h ${_short(lo, 1)}–${_short(hi, 1)}", f"${_short(lo, 1)}–${_short(hi, 1)}", f"${_short(lo, 0)}–${_short(hi, 0)}"),
-            (f"24h {_pct(ch.get('24h'))}   7d {_pct(ch.get('7d'))}", f"24h {_pct(ch.get('24h'))} 7d {_pct(ch.get('7d'))}"),
-            (quote,),
-        ][:rows]
+        if stock:
+            stats = [
+                (f"Prev close  {_num(q.get('prev_close'), dec, money)}", f"Prev {_num(q.get('prev_close'), dec, money)}"),
+                (f"Day  {_num(lo, dec, money)} – {_num(hi, dec, money)}",
+                 f"Day {money}{_short(lo, 1)}–{money}{_short(hi, 1)}", f"{money}{_short(lo, 0)}–{money}{_short(hi, 0)}"),
+                (f"Today {_pct(ch.get('24h'))}   Week {_pct(ch.get('7d'))}", f"1d {_pct(ch.get('24h'))} 7d {_pct(ch.get('7d'))}"),
+                (quote,),
+            ][:rows]
+        else:
+            stats = [
+                (f"Market cap  ${_short(q.get('market_cap'))}", f"Mcap ${_short(q.get('market_cap'))}"),
+                (f"24h  {_num(lo, dec, '$')} – {_num(hi, dec, '$')}",
+                 f"24h ${_short(lo, 1)}–${_short(hi, 1)}", f"${_short(lo, 1)}–${_short(hi, 1)}", f"${_short(lo, 0)}–${_short(hi, 0)}"),
+                (f"24h {_pct(ch.get('24h'))}   7d {_pct(ch.get('7d'))}", f"24h {_pct(ch.get('24h'))} 7d {_pct(ch.get('7d'))}"),
+                (quote,),
+            ][:rows]
         step_y = min(avail / len(stats), lh * 1.5)         # roomy but not spread out
         y = top + 2 * T
         for variants in stats:
@@ -738,12 +855,14 @@ class CryptoMode(Mode):
         return (self._icons["happy"][i].resize((size, size), Image.LANCZOS),
                 self._icons["sad"][i].resize((size, size), Image.LANCZOS))
 
-    def _draw_bottom(self, f, q, dec, g):
+    def _draw_bottom(self, f, q, dec, g, news=None):
         d, fg, T = f.draw, f.fg, g["T"]
         font12 = font(1, round(12 * T))
         bold = font(2, round(11 * T))
         news_font = font(5, round(10 * T))
-        news = self._news if self.settings.get("show_news", True) else []
+        stock = self._is_stock(q)
+        money = q.get("money") or "$"
+        news = (self._news if news is None else news) if self.settings.get("show_news", True) else []
         panels = 4 if news else 3
         step = int(time.time() % (BOTTOM_SECONDS * panels) // BOTTOM_SECONDS)
         band = g["band"]
@@ -762,21 +881,28 @@ class CryptoMode(Mode):
                 d.ellipse([(cx - r, line_y - r), (cx + r, line_y + r)], fill=fg)
                 d.text((cx - text_width(d, label, font12) // 2, line_y - 21 * T), label, font=font12, fill=fg)
 
-        if step == 0:   # sentiment
+        if step == 0 and stock:   # where the price sits in its 52-week range
+            lo, hi, cur = q.get("low_52w"), q.get("ath"), q.get("price")
+            pos = (cur - lo) / (hi - lo) if None not in (lo, hi, cur) and hi > lo else None
+            bar(pos, _num(cur, dec, money))
+            d.text((line_x - text_width(d, "52L", font12) - 4, line_y - 9 * T), "52L", font=font12, fill=fg)
+            d.text((line_x + line_w + 5, line_y - 10 * T), "52H", font=font12, fill=fg)
+        elif step == 0:   # sentiment
             up = q.get("sentiment_up")
             bar(float(up) / 100 if up is not None else None, f"{_num(up, 1)} %")
             icon_px = round(18 * T)
             happy, sad = self._icons_for(f.dark, icon_px)
             f.blit(sad, (line_x - icon_px - 5, line_y - icon_px // 2 - 1))
             f.blit(happy, (line_x + line_w + 7, line_y - icon_px // 2 - 1))
-        elif step == 1:  # 24h range
+        elif step == 1:  # the day's range (24 hours for a coin, the session for a share)
             lo, hi, cur = q.get("day_low"), q.get("day_high"), q.get("price")
             pos = (cur - lo) / (hi - lo) if None not in (lo, hi, cur) and hi > lo else None
-            bar(pos, _num(cur, dec, "$"))
-            d.text((line_x - text_width(d, "24L", font12) - 4, line_y - 9 * T), "24L", font=font12, fill=fg)
-            d.text((line_x + line_w + 5, line_y - 10 * T), "24H", font=font12, fill=fg)
+            bar(pos, _num(cur, dec, money))
+            left, right = (("LOW", "HIGH") if f.width >= 300 else ("LO", "HI")) if stock else ("24L", "24H")
+            d.text((line_x - text_width(d, left, font12) - 4, line_y - 9 * T), left, font=font12, fill=fg)
+            d.text((line_x + line_w + 5, line_y - 10 * T), right, font=font12, fill=fg)
         elif step == 2:  # % changes
-            labels = ["24H", "7D", "30D", "6M", "1Y"]
+            labels = ["1D", "1W", "1M", "6M", "1Y"] if stock else ["24H", "7D", "30D", "6M", "1Y"]
             keys = ["24h", "7d", "30d", "200d", "1y"]
             col = f.width / len(labels)
             for i, (lab, key) in enumerate(zip(labels, keys)):

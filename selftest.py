@@ -29,10 +29,10 @@ def main():
             except Exception as e:
                 failed += 1
                 print(f"  FAIL {w}x{h:<4} {name:8s} {type(e).__name__}: {e}")
-    # the colour versions the Whisplay's screen uses, both ways round
+    # the colour versions the Whisplay's screen uses, both ways round, and the GPi Case 2W's
     from pie_ink import lcd_screens
-    for w, h in ((280, 240), (240, 280)):
-        for name in ("system", "weather", "crypto", "gps", "camera", "paint", "clock", "testcard", "map", "buddy"):
+    for w, h in ((280, 240), (240, 280), (320, 216), (260, 220), (312, 162)):
+        for name in ("system", "weather", "crypto", "camera", "paint", "clock", "testcard", "buddy"):
             t = time.time()
             try:
                 img = lcd_screens.render({"screen": name, "light_mode": True, "accent": "#62d2ff"}, config=config, size=(w, h))

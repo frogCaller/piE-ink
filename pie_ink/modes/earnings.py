@@ -1,7 +1,8 @@
-"""Finance: what your salary comes to, and how much of today you have earned.
+"""Earnings: what your salary comes to, and how much of today you have earned.
 
 Both numbers come from things you already set — the yearly income in Settings
-and the work blocks in the Calendar — so there is no log to keep up to date.
+(under You) and the work blocks of your schedule — so there is no log to keep
+up to date. (This screen was called Finance until the markets took that name.)
 """
 import logging
 from datetime import date, datetime
@@ -27,9 +28,9 @@ def _money(v, sym="$", places=0):
     return f"{sym}{v:,.{places}f}"
 
 
-class FinanceMode(Mode):
-    name = "finance"
-    label = "Finance"
+class EarningsMode(Mode):
+    name = "earnings"
+    label = "Earnings"
 
     @property
     def interval(self):
@@ -79,7 +80,7 @@ class FinanceMode(Mode):
                 x += w + gap
 
         if not fig:
-            d.text((3, 0), "FINANCE", font=f12, fill=fg)
+            d.text((3, 0), "EARNINGS", font=f12, fill=fg)
             d.line([(0, hdr), (f.width, hdr)], fill=fg, width=1)
             d.text((5, hdr + 18 * T), "No income set.", font=font(1, round(14 * T)), fill=fg)
             d.text((5, hdr + 38 * T), "Add it in Settings, under You.", font=f11, fill=fg)

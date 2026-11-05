@@ -8,33 +8,37 @@ A Raspberry Pi desk pet that keeps me posted and comments throughout the day. In
   <img src="docs/pie-ink4.jpeg" height="260">
 </p>
 
-Display the time, weather, message, sketch, book, camera feed, crypto
-prices or the system stats on an e-ink display. The web page shows exactly what's
+Display the time, weather, message, sketch, book, camera feed, coin and
+share prices or the system stats on an e-ink display. The web page shows exactly what's
 on the panel, previews your changes before you send them, and works from any
 phone or laptop on your network.
 
 Works with Waveshare **2.13"** (V3/V4), **2.7"** (V1/V2, with four keys)
-and **3.7"** e-Paper HATs, and the PiSugar **Whisplay** HAT (a colour LCD
-with a speaker, microphones, a button and an LED). Every screen has a layout
-for each size.
+and **3.7"** e-Paper HATs, the PiSugar **Whisplay** HAT (a colour LCD
+with a speaker, microphones, a button and an LED), and the RetroFlag **GPi
+Case 2W** (a Pi Zero 2 W handheld: its screen, buttons and speaker). Every
+screen has a layout for each size.
 
 ## Parts
 
 - A Raspberry Pi (Zero 2 W through Pi 5) and a [micro SD card](https://amzn.to/4hEMYF4)
 - [2.13" e-Paper HAT](https://amzn.to/4zeRSzU) (V3 or V4) | 2.7" e-Paper HAT (V2 recommended) | 3.7" e-Paper HAT,
-- [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) (as a second)
+- [Waveshare 1.69"](https://amzn.to/4ALyVWV) or [1.9" LCD](https://amzn.to/4AIERA3) (as a second, or by itself)
 - [GPIO extender](https://amzn.to/3VeFst4)
 - [GPIO splitter](https://amzn.to/3TdY9MU)
+- Or instead: a PiSugar Whisplay HAT, or a RetroFlag GPi Case 2W (with a Pi Zero 2 W in it)
 
 Optional:
 - [UPS HAT](https://amzn.to/4yvY6LE)
 - [Waveshare USB Hat](https://amzn.to/4j0LMye)
-- [USB GPS receiver](https://amzn.to/4rMy5oP)
 - Pi camera or USB webcam
 - USB speaker
 - USB microphone
 
 (Amazon affiliate links)
+
+[How it all connects](docs/schematic.png) — one page: the header pin by
+pin, the HAT, the LCD's eight wires, power and USB.
 
 ## Install
 
@@ -52,10 +56,16 @@ Optional:
 3. Open `http://<pi-address>:5000` on your phone. The address is printed at
    the end of `setup.sh`; `http://<hostname>.local:5000` usually works too.
 
-`setup.sh` installs the packages, enables SPI, installs the voice and the
-listener (`--no-speech` skips those, about 200 MB), and installs PiE-ink as a
-service that is running when it finishes. It doesn't start at boot unless
-you ask:
+`setup.sh` asks one thing — your screen: an e-ink display (which one), an
+LCD by itself (the 1.69", the 1.9" or a Whisplay HAT), an e-ink with a 1.69"
+or 1.9" LCD beside it, or a GPi Case 2W — and sets up only what that screen
+needs (`./setup.sh --screen=27v2 --lcd=1.9` answers it without asking; run
+it again to change it). Then it installs the packages,
+enables SPI, installs the voice and the listener (`--no-speech` skips those,
+about 200 MB), and installs PiE-ink as a service that is running when it
+finishes. Everything else — the bot's Ollama, Telegram, Home Assistant, your
+coins and miners — is set up on the page, under the gear. It doesn't start at
+boot unless you ask:
 
 ```bash
 sudo systemctl enable pie-ink     # start at every boot from now on
@@ -63,9 +73,15 @@ sudo systemctl enable pie-ink     # start at every boot from now on
 sudo systemctl stop pie-ink       # stop (puts the panel to sleep)
 ```
 
-The default panel is the 2.13" V4 — pick yours under **Settings → Screen**.
-Swapping HATs later: power off, swap, boot, pick. A Whisplay HAT's sound
-card needs `./setup.sh --whisplay` once.
+Swapping screens later: power off, swap, boot, and pick it under
+**Settings → Screen** (or run `./setup.sh` again). A Whisplay HAT also gets
+its sound card's driver from `setup.sh`, and a Whisplay that turns up on a Pi
+still on the default panel is used without being picked.
+
+In a **GPi Case 2W**, pick it when `setup.sh` asks (or run
+`./setup.sh --screen=gpi`), then reboot. The case's screen is the panel, each
+screen has buttons of its own (shown along the bottom), L R change screens,
+the speaker talks and the power switch shuts the Pi down safely. More in [the guide](docs/guide.md#in-a-gpi-case-2w).
 
 **Updating:** `cd piE-ink && git pull && sudo systemctl restart pie-ink`.
 Your settings and files live in `config.yaml` and `data/`, which updates
@@ -85,17 +101,17 @@ a column on the right.
 
 - **Clock** — big, in any font; seconds and the date if you like.
 - **Weather** — today, with a face that reacts to the sky, and four days
-  ahead. It finds its own location (a USB GPS, or the Pi's internet
-  address); type a town if you want somewhere else.
+  ahead. It finds its own location (the Pi's internet address); type a
+  town if you want somewhere else.
 - **Me** — your day: how far into the work block, how long awake, the
-  weather, your coin, days to your birthday, with a face that comments.
+  weather, your coin or share, days to your birthday, with a face that comments.
 - **Message** — your own text, or a joke, fortune or topic that changes on
   its own; read out loud if you like.
 - **The bot** — your own LLM (Ollama, on the Pi or another machine) on the
   screen, with a face that follows the tone of its answer. It knows the
-  time, the weather, your coins and what the camera sees; it speaks through
+  time, the weather, your coins and shares and what the camera sees; it speaks through
   a speaker, listens for a wake phrase, and pipes up by itself now and then.
-- **Finance** — what today has earned so far, from your yearly figure and
+- **Earnings** — what today has earned so far, from your yearly figure and
   your schedule.
 - **Music** — plays `data/music` through a USB speaker, or through the phone
   you're holding (**Play on this device**).
@@ -106,14 +122,14 @@ a column on the right.
   HAT's keys.
 - **Camera** — a live view on the page, a frame a second on the panel,
   photos with filters, the other PiE-inks' cameras too.
-- **Crypto** — the Cryptogotchi: CoinGecko prices with a face that reacts to
-  the market, a graph, your miners (Duino-Coin, Verus) and what you hold —
+- **Finance** — the Cryptogotchi, with shares beside the coins: CoinGecko's
+  prices for the coins, Yahoo's for Apple, Tesla or an ETF (a few minutes
+  behind, no key), each with a face that reacts to the market, a graph,
+  ranges and headlines; your miners (Duino-Coin, Verus) and what you hold —
   with a word from the bot when it passes your line or a day goes badly.
-- **GPS** and **Map** — where the Pi is, from a USB receiver, on
-  OpenStreetMap, with the day's track.
 - **System** — CPU, temperature, memory, disk, IP, uptime.
 - **Group chat** — messages and postcards between the PiE-inks on your
-  network, and their bots talking to each other.
+  network and friends' Pis, and a friend's bot talking to yours.
 
 Under the panel: **Rotate**, **Refresh** (clears ghosting) and **Off**.
 **Settings → Cycle** runs a slideshow of the screens you tick.
@@ -121,31 +137,72 @@ Under the panel: **Rotate**, **Refresh** (clears ghosting) and **Off**.
 ## What else it does
 
 - **Talks and listens.** A USB speaker gives it a voice
-  ([Piper](https://github.com/rhasspy/piper), offline, a voice bundled); a
+  ([Piper](https://github.com/rhasspy/piper), offline, a voice bundled) — or,
+  with no speaker here, a Pietato on the network says its lines; a
   USB microphone lets you say "hey cool beans, what's the weather?" — or any
   phrase you set — recognised on the Pi itself. Settings → Sound.
 - **Works the house.** With Home Assistant: "turn on the living room tv",
-  "channel 5452", "volume up", "open netflix", "turn off the lamp" — said,
-  typed or sent from Telegram. Settings → Home.
+  "channel 5452", "volume up", "open netflix", "turn off the lamp" — or just
+  "it's dark in here" — said, typed or sent from Telegram. Or with your hands
+  in front of the camera: twist for the volume, a fist for the arrows, both
+  hands open for the lights. Settings → Home.
 - **Messages your phone.** A Telegram bot of your own (Settings → Telegram):
-  it tells you what the camera saw, when the miners drop out or your crypto
-  passes the line, and takes commands — `/screen weather`, `/photo`, `/map`,
-  `/tv`, `/holdings`, `/look left`, or just words.
+  it tells you what the camera saw, when the miners drop out or your holdings
+  pass the line, and takes commands — `/screen weather`, `/photo`, `/tv`,
+  `/holdings`, `/look left`, or just words.
 - **Watches the room.** The camera is compared frame to frame and, when
   something changes, a vision model (or OpenCV on the Pi) says what it sees:
   a list of the day's events, a word out loud, a picture to your phone. A
-  camera that turns gets a joystick, *look around*, *follow me*, and a
-  **little friend** that looks about the room by itself and says hello.
+  camera that turns is steered by dragging the live view (or with a game
+  controller plugged into the computer you're on), the wheel or a pinch
+  zooms, and it has *look around*, *follow me*, and a **little friend**
+  that looks about the room by itself and says hello. Ask it "are you
+  happy?" and it nods — or shakes its head — before it answers.
+- **Remembers, and reminds you.** "Remember that the bins go out on
+  Tuesday" goes in its notebook and into every answer from then on; "remind
+  me in 20 minutes to check the oven", "wake me at 7", "set a timer for 10
+  minutes" come round on the panel, out loud and on your phone.
 - **Keeps watch for you.** The **agent** (Settings → Agent) reads goals in
   your own words — *tell me if the server goes down, keep an eye on the
   printer* — checks every few minutes, and acts only in the ways you tick.
-- **Talks to the other PiE-inks.** Pis on the network find each other:
-  message them, send a postcard, see their cameras, ask "which pi has a
-  gps", set two bots talking.
-- **A second screen.** A Waveshare 1.69" or 1.9" LCD beside the e-ink shows
-  system info, the clock, the weather, the map, the GPS, the coin, the
-  camera, or a colour painting from the Draw tab. Wiring and pins are in
+- **One bot, a bigger house.** Another PiE-ink of yours on the network is
+  another room of the same bot's house, not a second bot: it knows what's on
+  in each room and what was said there, keeps one notebook and one list of
+  reminders across them ("forget …" reaches every room), and is pleased when
+  a room joins. Message a room, send it a postcard, see its camera, ask
+  "which pi has a camera". Friends' Pis added by address are other houses,
+  with bots of their own to set talking. What one Pi has fetched — the
+  weather, coin and share prices — it shares (`/api/shared`, with how old each
+  is), so another doesn't fetch it again.
+- **Loves a Pietato.** [Pietato](https://github.com/frogCaller/Pietato) — the
+  pocket media center — and PiE-ink share what they fetch (the weather, coin
+  prices and charts: whichever is due first fetches, the other uses it), and
+  PiE-ink knows one the moment it's on the network: a hello on the bot's screen (starry-eyed, out
+  loud, in its own words with a model), a tile on the page, and from then on
+  it knows what you're playing or watching on it, "is my Pietato around?",
+  `/pis`, and its cameras among the other cameras. It's one bot for both:
+  "show me the latest photo", "find the song called blue monday", "put the
+  holiday video on the pietato" look on whichever Pi has it, and talking to
+  the Bot on the Pietato is talking to this one. Its screen is one more
+  screen: put any screen, a drawing, a message or the time on it, full
+  screen — on one Pietato or all of them. Say "I'm bored" and it suggests one
+  of its games (or the TV). Nothing to set up on either side.
+- **Opens what's on a USB drive.** Plug one in, into the Pi or a hub, and
+  the bot looks through it: "what's on the usb drive", "show me the beach
+  photo on the usb drive", "open the packing list" find it there like
+  anything else. setup.sh has drives mounted as they go in, read-only, so
+  you can pull one out whenever. It notices whatever you plug in, too: a
+  wide-eyed face and a line ("Ooh — a hub, with a keyboard and a USB drive
+  on it!"), starry-eyed for a drive, sad when something's pulled out.
+  [More](docs/guide.md#usb-drives-and-whatever-you-plug-in).
+- **A second screen.** Pick it under Settings → Screen (the 1.69" or the 1.9"
+  Waveshare LCD): it shows any screen, drawn again for its size so it fills
+  it, or the same as the e-ink. Wiring and pins are in
   the [guide](docs/guide.md#a-second-screen-a-small-colour-lcd).
+- **Snake, when it's bored.** Nothing from you for a while and the LCD
+  starts a game of Snake, steered by a decision model (`ollama pull tev1`)
+  on your bot's machine; the moment you do something, the screen you had
+  comes back. [More](docs/guide.md#snake-when-its-bored).
 - **Keys on the 2.7" HAT** — each gets an action under Settings → Screen:
   previous, next, next screen, full refresh, screen off.
 - **Fonts** — drop a `.ttf`, `.otf` or `.ttc` into `assets/fonts/` and it
@@ -168,30 +225,31 @@ drivers over a pretend bus.
 
 ```
 app.py                 web server and JSON API
-setup.sh               installer (packages, SPI, systemd service)
+setup.sh               installer (the one question, your screen; its packages, SPI or the GPi Case; USB drives; systemd service)
 pie_ink/service.py     the one thread that owns the panel
-pie_ink/panels/        the panels: 2.13" V3/V4, 2.7" V1/V2, 3.7", Whisplay, mocks
+pie_ink/panels/        the panels: 2.13" V3/V4, 2.7" V1/V2, 3.7", Whisplay, GPi Case 2W, mocks
 pie_ink/modes/         the screens
-pie_ink/               everything else: camera, sound, listening, the bot, GPS, maps, the agent, the friend…
+pie_ink/               everything else: camera, sound, listening, the bot, the markets, the agent, the friend…
 waveshare_epd/         Waveshare's drivers
 assets/                fonts, icons, jokes, fortunes, topics, seed prices
-data/                  your books, drawings, coins, photos and cache (made at runtime)
+data/                  your books, drawings, coins and shares, photos and cache (made at runtime)
 ```
 
 ## Troubleshooting
 
 - Nothing on the screen: check the HAT is seated and SPI is on
-  (`ls /dev/spidev*`), then `journalctl -u pie-ink -f`. The status line
-  under the preview shows the last error.
+  (`ls /dev/spidev*`; if not, `sudo raspi-config nonint do_spi 0` and
+  reboot), then `journalctl -u pie-ink -f`. The status line under the
+  preview shows the last error.
 - "No answer from the panel": the driver and the HAT don't match. A 2.7" is
   V1 or V2 (the V2 says so on the board), a 2.13" V3 or V4 — pick the other
   one under Settings → Screen.
 - `can not open gpiochip`: `sudo apt install python3-lgpio`, and your user in
   the `gpio` and `spi` groups (`sudo usermod -aG gpio,spi $USER`).
 - Ghosting: tap **Refresh**, or lower "Full refresh every".
-- A webcam, speaker, microphone or GPS that "isn't working": press **Why not
-  found?** on the Camera tab, **Why not working?** by the GPS line on the
-  Weather tab, or **Speaker or mic missing?** under Settings → Sound. Each
+- A webcam, speaker or microphone that "isn't working": press **Why not
+  found?** on the Camera tab, or **Speaker or mic missing?** under
+  Settings → Sound. Each
   checks the USB bus, the drivers and the permissions and says which of the
   usual things it is. On a Zero 2 W it is nearly always power — use a hub
   with its own supply and a data (OTG) adapter.
@@ -200,11 +258,10 @@ The [guide](docs/guide.md#troubleshooting) has the rest.
 
 ## Credits
 
-- Prices from [CoinGecko](https://www.coingecko.com/en/api); weather from
-  [Open-Meteo](https://open-meteo.com/) and the US National Weather Service;
-  place names from [Nominatim](https://nominatim.org/); map tiles ©
-  [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors,
-  drawn with [Leaflet](https://leafletjs.com/) (BSD-2, bundled).
+- Coin prices from [CoinGecko](https://www.coingecko.com/en/api); share
+  prices from Yahoo Finance's chart service (unofficial, no key; delayed);
+  weather from [Open-Meteo](https://open-meteo.com/) and the US National
+  Weather Service.
 - `waveshare_epd/` is Waveshare's e-Paper library (MIT), with two small
   changes: the wait for the controller gives up after 30 s instead of never,
   and the SPI device isn't reopened on top of itself at every init. The 2.7"

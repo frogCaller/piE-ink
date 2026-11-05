@@ -8,18 +8,106 @@ tokens). The TV is a media_player entity; brands that only take key presses
 for some things (channel digits, arrows) use its remote entity as well.
 Anything else with an on/off is found by the name Home Assistant gives it.
 
+A TV that is off has its network off too, so Home Assistant's turn_on is
+often a no-op — it says yes and nothing happens. "Turn on the tv" therefore
+sends everything that can wake one: the media player's turn_on (or toggle,
+when it doesn't claim turn_on), the remote entity's own turn_on, and a
+Wake-on-LAN packet straight from this Pi, which is on the TV's own network
+where Home Assistant (in a container, on another subnet) may not be. The
+TV's MAC for that comes from Home Assistant itself — its device registry,
+asked through the template API — so nothing need be typed. Then it waits a
+few seconds for the TV to say it's on, and says so if it hasn't.
+
 Nothing here raises at the caller: handle() returns what the bot should say,
 or None when the words weren't a home command at all, so the bot answers
 them instead.
 """
 import logging
 import re
+import socket
 import threading
 import time
 
 import requests
 
 log = logging.getLogger(__name__)
+
+TV_ON_WAIT = 8.0                 # how long "turn on the tv" waits for the TV to say it's on
+ON_STATES = {"on", "playing", "paused", "idle", "buffering"}
+# media_player supported_features (MediaPlayerEntityFeature): what Home Assistant says the entity can do
+F_TURN_ON, F_TURN_OFF = 128, 256
+WOL_PORTS = (9, 7)               # where a Wake-on-LAN packet goes (the discard and echo ports, by convention)
+ARP = "/proc/net/arp"            # the kernel's table of who has which address, for finding a TV's MAC
+
+
+def magic_packet(mac):
+    """The Wake-on-LAN packet for a MAC: six 0xFF, then the address sixteen times."""
+    raw = bytes.fromhex(re.sub(r"[^0-9a-fA-F]", "", mac or ""))
+    if len(raw) != 6:
+        raise ValueError(f"not a MAC address: {mac!r}")
+    return b"\xff" * 6 + raw * 16
+
+
+def wake(mac, ip="", times=3):
+    """Wake-on-LAN from this Pi: the magic packet to the whole LAN and, with the
+    TV's address, to it and its subnet directly, a few times over (a packet or
+    two can go missing). True when it went out."""
+    try:
+        packet = magic_packet(mac)
+    except ValueError as e:
+        log.info("home: %s", e)
+        return False
+    targets = ["255.255.255.255"]
+    ip = (ip or "").strip()
+    if re.match(r"^\d{1,3}(?:\.\d{1,3}){3}$", ip):
+        targets += [ip, ip.rsplit(".", 1)[0] + ".255"]
+    sent = False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            for i in range(times):
+                for target in targets:
+                    for port in WOL_PORTS:
+                        try:
+                            sock.sendto(packet, (target, port))
+                            sent = True
+                        except OSError as e:
+                            log.debug("home: wake-on-lan to %s:%s: %s", target, port, e)
+                if i < times - 1:
+                    time.sleep(0.1)
+    except OSError as e:
+        log.info("home: couldn't send the wake-up: %s", e)
+    return sent
+
+
+def ip_of(mac):
+    """The address this network last saw a MAC at, from the kernel's ARP table; "" if none."""
+    mac = (mac or "").strip().lower()
+    if not mac:
+        return ""
+    try:
+        with open(ARP, encoding="utf-8", errors="replace") as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 4 and parts[3].lower() == mac:
+                    return parts[0]
+    except OSError:
+        pass
+    return ""
+
+    try:
+        subprocess.run(["ping", "-c", "1", "-W", "1", ip], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+    except Exception:
+        pass
+    try:
+        with open(ARP, encoding="utf-8", errors="replace") as f:
+            for line in f.readlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 4 and parts[0] == ip and parts[3] != "00:00:00:00:00:00":
+                    return parts[3].upper()
+    except OSError:
+        pass
+    return ""
 
 # what the buttons on each brand's remote are called, in Home Assistant terms
 PRESETS = {
@@ -266,6 +354,7 @@ def parse(text, tv_names=(), others=True):
 
 # -- Home Assistant --------------------------------------------------------------------
 
+
 class Home:
     def __init__(self):
         self.conf = {}
@@ -275,11 +364,17 @@ class Home:
         self.info = {}                    # version, location name — from the last check
         self.last = None                  # {"text", "reply", "when"} of the last command
         self._last_target = None          # what "it" means: "tv" or an entity id
+        self.trail = []                   # what the last "turn on the tv" did, call by call
+        self._macs = {}                   # entity id -> MAC, as Home Assistant's registry had it
+        self._registry = None             # (what the registry said about the players and remotes, when)
 
     def configure(self, conf):
         self.conf = dict(conf or {})
         self._states = ([], 0.0)
+        self._registry = None
         self.error = None
+        if self.enabled() and self.ready() and self._tv():
+            threading.Thread(target=self.find_mac, kwargs={"force": True}, daemon=True, name="home-mac").start()
 
     def enabled(self):
         return bool(self.conf.get("enabled"))
@@ -306,6 +401,15 @@ class Home:
         r = requests.get(self._base(conf) + "/api" + path, headers=self._headers(conf), timeout=wait)
         self._raise(r)
         return r.json()
+
+    def _render(self, template, conf=None, wait=6):
+        """A Jinja template rendered by Home Assistant (POST /api/template) — the
+        way to its device registry over REST."""
+        conf = conf or self.conf
+        r = requests.post(self._base(conf) + "/api/template", json={"template": template},
+                          headers=self._headers(conf), timeout=wait)
+        self._raise(r)
+        return (r.text or "").strip()
 
     def _post(self, path, data, conf=None, wait=10):
         conf = conf or self.conf
@@ -373,8 +477,11 @@ class Home:
             self.info = {"version": out["version"], "name": out["name"]}
             self.error = None
         out["ok"] = True
-        out["players"] = _listed(states, "media_player")
-        out["remotes"] = _listed(states, "remote")
+        reg = self.registry(force=True) if (conf is self.conf or conf == self.conf) else {}
+        out["players"] = _listed(states, "media_player", reg)
+        out["remotes"] = _listed(states, "remote", reg)
+        if reg is not None and self._tv():
+            out["tv_mac_found"] = self.find_mac()
         return out
 
     def states(self, force=False):
@@ -460,6 +567,65 @@ class Home:
     def _tv(self):
         return (self.conf.get("tv") or "").strip()
 
+    def features(self, entity_id=None, st=None):
+        """What Home Assistant says the entity supports (its supported_features
+        bitmask); 0 when it doesn't say."""
+        st = st or self.state_of(entity_id or self._tv())
+        try:
+            return int(((st or {}).get("attributes") or {}).get("supported_features") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def registry(self, force=False):
+        """What Home Assistant's device registry says about every media player and
+        remote, asked through the template API: {entity_id: {"via": [integration
+        domains], "mac": "AA:BB:…"}}. Cached ten minutes; {} when it can't be asked."""
+        if not self.ready():
+            return {}
+        if self._registry and not force and time.time() - self._registry[1] < 600:
+            return self._registry[0]
+        template = ("{% for s in states.media_player + states.remote %}{% set d = device_id(s.entity_id) %}"
+                    "{{ s.entity_id }}|{% if d %}{{ (device_attr(d, 'identifiers') or []) | map('first') | list | join(',') }}{% endif %}"
+                    "|{% if d %}{% for c in (device_attr(d, 'connections') or []) %}{% if c[0] == 'mac' %}{{ c[1] }}{% endif %}{% endfor %}{% endif %}\n"
+                    "{% endfor %}")
+        out = {}
+        try:
+            text = self._render(template, wait=8)
+        except Exception as e:
+            log.info("home: couldn't ask Home Assistant's registry: %s", str(e)[:100])
+            text = ""
+        for line in text.splitlines():
+            parts = line.strip().split("|")
+            if len(parts) != 3 or "." not in parts[0]:
+                continue
+            mac = parts[2].strip()
+            out[parts[0].strip()] = {"via": [v for v in parts[1].split(",") if v],
+                                     "mac": mac.upper() if re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", mac) else ""}
+        if out or not self._registry:
+            self._registry = (out, time.time())
+        return self._registry[0]
+
+    def find_mac(self, entity_id=None, force=False):
+        """The TV's MAC address, from Home Assistant's own device registry (the
+        device the entity belongs to, and its "mac" connection) — so it needn't
+        be typed. "" when Home Assistant doesn't know it either."""
+        eid = entity_id or self._tv()
+        if not eid or not self.ready():
+            return ""
+        mac = (self.registry(force=force).get(eid) or {}).get("mac", "")
+        if mac and self._macs.get(eid) != mac:
+            log.info("home: Home Assistant knows %s as %s", eid, mac)
+        self._macs[eid] = mac
+        return mac
+
+    def _mac(self):
+        """The TV's MAC: typed in, or found in Home Assistant."""
+        return (self.conf.get("tv_mac") or "").strip() or self.find_mac()
+
+    def _ip(self):
+        """The TV's address: typed in, or what this Pi's ARP table has for its MAC."""
+        return (self.conf.get("tv_ip") or "").strip() or ip_of(self._mac())
+
     def _remote(self):
         return (self.conf.get("remote") or "").strip()
 
@@ -495,10 +661,86 @@ class Home:
 
     def tv_power(self, want):
         service = {"on": "turn_on", "off": "turn_off", "toggle": "toggle"}[want]
+        if want != "on":
+            okay, why = self.call("media_player", service, {"entity_id": self._tv()})
+            if not okay and self._remote():
+                okay, why = self.key("power")
+            return okay, why
+        # on. What the entity can do decides the call, as a remote that works does: turn_on when Home
+        # Assistant says the player supports it, toggle when it doesn't say so but the TV is off (a toggle
+        # on an off player is its turn_on), turn_on when it says nothing at all
+        st = self.state_of(self._tv())
+        was, feats = (st or {}).get("state"), self.features(st=st)
+        trail = []                                        # what was done, for the page and the log
+        if was in ON_STATES:
+            trail.append(f"the TV already says {was}")
+        if feats and not feats & F_TURN_ON and was not in ON_STATES:
+            service = "toggle"
         okay, why = self.call("media_player", service, {"entity_id": self._tv()})
-        if not okay and self._remote() and want != "on":
-            okay, why = self.key("power")
-        return okay, why
+        trail.append(f"media_player.{service} → {'ok' if okay else why}")
+        if not okay and "support" not in (why or "").lower():
+            self.trail = trail                           # Home Assistant itself refused (the token, the address): say so
+            return False, why
+        # a TV that's off has its network off, so that alone is often a no-op — Home Assistant says yes
+        # and nothing happens. Everything else that can wake it goes too: the remote entity's own turn_on,
+        # and a Wake-on-LAN packet from this Pi (with the TV's MAC in the settings)
+        went = [okay]
+        if self._remote():
+            went.append(self._try("remote", "turn_on", {"entity_id": self._remote()}))
+            trail.append(f"remote.turn_on → {'ok' if went[-1] else 'no'}")
+        mac = self._mac()
+        if mac:
+            went.append(wake(mac, self._ip()))
+            trail.append(f"wake-on-lan from the Pi to {mac} → {'sent' if went[-1] else 'no'}")
+            if self._try("wake_on_lan", "send_magic_packet", {"mac": mac}):   # Home Assistant's own too, if it has it
+                trail.append("wake_on_lan.send_magic_packet → ok")
+        if not any(went):
+            self.trail = trail
+            return False, why
+        state = self._tv_comes_on() if was not in ON_STATES else was
+        trail.append(f"after {TV_ON_WAIT:.0f} s the TV says {state or 'nothing'}" if was not in ON_STATES else "")
+        self.trail = [t for t in trail if t]
+        log.info("home: turn on the tv: %s", "; ".join(self.trail))
+        if state in ON_STATES:
+            return True, ""
+        return True, "Sent the power-on to the TV; it hasn't said it's on yet. " + self._why_still_off(mac)
+
+    def _why_still_off(self, mac):
+        """The likeliest reason a TV ignored everything, from what's known."""
+        reg = self._registry[0] if self._registry else {}
+        cloud = [eid for eid, r in reg.items() if eid.startswith("media_player.") and eid != self._tv()
+                 and "smartthings" in r.get("via", [])]
+        if cloud:
+            return (f"{cloud[0]} is the same TV through SmartThings, which turns it on by the cloud, off or not — "
+                    "pick that one as the TV in Settings → Home.")
+        if not mac:
+            return ("Home Assistant doesn't know the TV's MAC address, so neither it nor I can wake it from off: re-add the TV "
+                    "in Home Assistant so it's discovered (or type the MAC in Settings → Home).")
+        return (f"The wake-up packet went to {mac} and the TV didn't answer it. On a Samsung, switch on Power On with Mobile "
+                "(Settings → General → Network → Expert Settings); on Wi-Fi some sets only wake from standby, not from a "
+                "long switched-off — a cable is surer.")
+
+    def _try(self, domain, service, data):
+        """A service call that may well not exist (a remote without turn_on, no
+        wake_on_lan integration): True if it went through, and no fuss if not."""
+        try:
+            self._post(f"/services/{domain}/{service}", data)
+            return True
+        except Exception as e:
+            log.debug("home: %s.%s %s: %s", domain, service, data, e)
+            return False
+
+    def _tv_comes_on(self, seconds=None):
+        """Wait for the TV to say it's on — a few seconds, as it boots and Home
+        Assistant notices — and return its state word."""
+        end = time.time() + (TV_ON_WAIT if seconds is None else seconds)
+        while True:
+            st = self.state_of(self._tv())
+            state = (st or {}).get("state")
+            if state in ON_STATES or time.time() >= end:
+                self._tv_cache = (_state_word(st) if st else None, time.time())
+                return state
+            time.sleep(1.5)
 
     def tv_volume(self, direction, steps=1):
         service = "volume_up" if direction == "up" else "volume_down"
@@ -680,7 +922,8 @@ class Home:
                 return None
             replies.append(reply)
         reply = " ".join(replies)
-        self.last = {"text": text, "reply": reply, "when": time.time()}
+        self.last = {"text": text, "reply": reply, "when": time.time(), "trail": self.trail}
+        self.trail = []
         log.info("home: %r → %s", text, reply)
         return reply
 
@@ -691,7 +934,8 @@ class Home:
         if not self.ready():
             return "Home Assistant isn't set up — Settings → Home."
         reply = self._do(tuple(intent)) or "Couldn't — that isn't something I know how to do."
-        self.last = {"text": label or ":".join(str(x) for x in intent), "reply": reply, "when": time.time()}
+        self.last = {"text": label or ":".join(str(x) for x in intent), "reply": reply, "when": time.time(), "trail": self.trail}
+        self.trail = []
         log.info("home: %s → %s", self.last["text"], reply)
         return reply
 
@@ -706,6 +950,8 @@ class Home:
         if kind == "tv_power":
             okay, why = self.tv_power(intent[1])
             said = {"on": "TV on.", "off": "TV off.", "toggle": "TV toggled."}[intent[1]]
+            if okay and why:
+                said = why                                # sent, but the TV hasn't said it's on: say that instead
         elif kind == "tv_volume":
             okay, why = self.tv_volume(intent[1], intent[2])
             said = f"Volume {intent[1]}" + (f" {intent[2]}." if intent[2] > 1 else ".")
@@ -739,21 +985,39 @@ class Home:
         return f"Couldn't — {why}."
 
     def status(self):
-        players = _listed(self._states[0], "media_player") if self._states[0] else []
-        remotes = _listed(self._states[0], "remote") if self._states[0] else []
+        reg = self._registry[0] if self._registry else {}
+        players = _listed(self._states[0], "media_player", reg) if self._states[0] else []
+        remotes = _listed(self._states[0], "remote", reg) if self._states[0] else []
+        found = self._macs.get(self._tv(), "")
         return {"enabled": self.enabled(), "configured": self.ready(), "error": self.error, "info": self.info,
                 "tv": self._tv(), "remote": self._remote(), "preset": self.conf.get("preset") or DEFAULT_PRESET,
+                "tv_mac_found": found, "tv_mac": (self.conf.get("tv_mac") or "").strip() or found,
                 "names": self.tv_names(), "players": players, "remotes": remotes, "sources": self.tv_sources(),
                 "last": self.last, "presets": [{"id": k, "label": v["label"]} for k, v in PRESETS.items()]}
 
 
-def _listed(states, domain):
+INTEGRATIONS = {"samsungtv": "Samsung TV", "smartthings": "SmartThings", "webostv": "LG webOS", "androidtv": "Android TV",
+                "androidtv_remote": "Android TV remote", "cast": "Google Cast", "dlna_dmr": "DLNA", "roku": "Roku",
+                "apple_tv": "Apple TV", "sonos": "Sonos", "vizio": "Vizio", "philips_js": "Philips", "braviatv": "Sony Bravia",
+                "kodi": "Kodi", "plex": "Plex", "spotify": "Spotify", "squeezebox": "Squeezebox", "mpd": "MPD", "vlc": "VLC"}
+
+
+def _listed(states, domain, registry=None):
     out = []
     for st in states or []:
         eid = st.get("entity_id", "")
         if eid.startswith(domain + "."):
+            try:
+                feats = int((st.get("attributes") or {}).get("supported_features") or 0)
+            except (TypeError, ValueError):
+                feats = 0
+            via = [v for v in ((registry or {}).get(eid) or {}).get("via", []) if v in INTEGRATIONS] or \
+                ((registry or {}).get(eid) or {}).get("via", [])
             out.append({"id": eid, "name": (st.get("attributes") or {}).get("friendly_name") or eid,
-                        "state": st.get("state")})
+                        "state": st.get("state"), "features": feats,
+                        "can_on": None if not feats else bool(feats & F_TURN_ON),   # None: it doesn't say
+                        "via": INTEGRATIONS.get(via[0], via[0]) if via else "",
+                        "mac": ((registry or {}).get(eid) or {}).get("mac", "")})
     out.sort(key=lambda x: x["name"].lower())
     return out
 

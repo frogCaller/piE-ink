@@ -264,9 +264,12 @@ def card_of(device):
     return m.group(1) if m else None
 
 
+PITATO_OUTPUT = "pitato"       # the output's name for a Pietato's speaker, where a device goes in the settings
+
+
 def devices():
-    """ALSA playback devices: [{id, label, alias}] — id goes in the settings."""
-    return entries("aplay")
+    """ALSA playback devices: [{id, label, alias}] — id goes in the settings — and a Pietato's speaker."""
+    return entries("aplay") + [{"id": PITATO_OUTPUT, "label": "A Pietato's speaker (on your network)"}]
 
 
 def mixer_controls(device=""):
@@ -418,6 +421,8 @@ def output_label(device):
     """A name for an output, for messages: the card's name when we know it."""
     if device == here.OUTPUT:
         return "your phone or computer"
+    if device == PITATO_OUTPUT:
+        return "the Pietato's speaker"
     if not device:
         return "the system default output"
     for d in devices():
@@ -430,7 +435,7 @@ def _fallback_outputs(device):
     """Where else to try when an output refuses: the system default when a
     card was chosen, the cards themselves when the default was."""
     others = [""] if device else []
-    others += [d["id"] for d in devices() if d["id"] and device not in (d["id"], d.get("alias"))]
+    others += [d["id"] for d in entries("aplay") if d["id"] and device not in (d["id"], d.get("alias"))]
     return others
 
 
@@ -1509,14 +1514,97 @@ def voice_in_use(conf):
     return "none", why + "; espeak-ng isn't installed either"
 
 
+def _wav_bytes(pcm, rate):
+    import io
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+def pitato_targets():
+    """The Pietatos whose speaker could say a line: those about with a page (the locked ones apart). With
+    more than one, the one on this very Pi comes first, then the one heard from last (the one in use)."""
+    from . import pitato
+    about = sorted((p for p in pitato.PITATO.around() if p.get("web")), key=lambda p: (not p.get("here"), -p.get("last", 0)))
+    return [p for p in about if not p.get("locked")], [p for p in about if p.get("locked")]
+
+
+def to_pitato(conf):
+    """Whether a line goes to a Pietato's speaker: that output was chosen, or this Pi has no
+    sound card at all and a Pietato is about."""
+    device = (conf.get("device") or "").strip()
+    if device == PITATO_OUTPUT:
+        return True
+    if device or alsa_list("aplay"):
+        return False
+    try:
+        return bool(pitato_targets()[0])
+    except Exception:
+        return False
+
+
+def say_on_pitato(text, conf, wait=False):
+    """The line made here (the natural voice, or the plain one) and said on a Pietato's speaker:
+    its page takes a WAV to say out loud (POST /coder/say, what a coding agent sends it). Clips
+    take turns there, and it keeps quiet while something is playing on it."""
+    from . import pitato
+    text = " ".join((text or "").split())
+    if not text:
+        return False, "nothing to say"
+    targets, locked = pitato_targets()
+    if not targets:
+        return False, ("the Pietato's page has a password, so it can't be asked to speak" if locked
+                       else "no Pietato about to say it on")
+
+    def run():
+        try:
+            pcm, rate = _synthesise(text, conf)
+        except Exception as e:
+            log.warning("couldn't make the clip for the Pietato: %s", e)
+            return False, str(e)[:120]
+        wav = _wav_bytes(pcm, rate)
+        secs = len(pcm) / (2.0 * rate)
+        why = "no answer"
+        for p in targets[:2]:
+            try:
+                r = requests.post(f"http://{p['ip']}:{pitato.PORT}/coder/say", params={"pose": "talking"}, data=wav,
+                                  headers={"Content-Type": "audio/wav"}, timeout=secs + 40)
+            except Exception as e:
+                why = str(e)[:80]
+                continue
+            if r.status_code == 401:
+                why = "its page has a password"
+                continue
+            if r.status_code == 200:
+                return True, f"said on the Pietato ({p.get('name') or p['ip']})"
+            try:
+                why = (r.json() or {}).get("error") or f"the Pietato said {r.status_code}"
+            except ValueError:
+                why = f"the Pietato said {r.status_code}"
+        log.warning("the Pietato wouldn't say it: %s", why)
+        return False, why
+    if wait:
+        return run()
+    threading.Thread(target=run, daemon=True, name="say-on-pitato").start()
+    return True, "speaking on the Pietato"
+
+
 def say(text, conf, wait=False):
     """Speak a line, with the natural voice if it's set up and the plain one
     if not. Interrupts whatever is being said. With wait, comes back once the
     line has played (or couldn't), saying which output it went to or why
-    not; without, straight away with "speaking"."""
+    not; without, straight away with "speaking". With no sound card here (or
+    the Pietato's speaker chosen), a Pietato on the network says it."""
     text = " ".join((text or "").split())
     if not text:
         return False, "nothing to say"
+    if not here.HERE.listening() and to_pitato(conf):
+        return say_on_pitato(text, conf, wait)
     ready, why = piper_ready(conf)
     if ready:
         return SPEAKER.say(text, conf, wait=wait)
@@ -1718,7 +1806,7 @@ def probe(conf=None):
             elif any(h.get("self_powered") is False for h in hubs):
                 said.append("The hub has no power of its own, though, and the camera's motors draw bursts of current "
                             "when it turns: a hub with its own power adapter is worth trying first.")
-            said.append("To tell for sure: unplug the camera" + (" and the GPS" if any("comms" in u["classes"] for u in usb) else "")
+            said.append("To tell for sure: unplug the camera"
                         + ", plug only the speaker in, and press Watch the USB bus (below) — or plug the speaker "
                         "straight into the Pi's adapter, with no hub. Comes up alone: it's the load on the hub, and a hub "
                         "with its own power adapter fixes it. Doesn't, even alone: try another cable, and the speaker on "

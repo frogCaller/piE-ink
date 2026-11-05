@@ -1,7 +1,7 @@
 """The agent: goals of your own words, a look around every few minutes, a
 decision, and — when a goal calls for it — an action.
 
-    camera · GPS · Home Assistant · the Pi itself · the other PiE-inks
+    camera · Home Assistant · the Pi itself · the other PiE-inks
                               ↓
                         a report, in words
                               ↓
@@ -62,7 +62,7 @@ class Agent:
         # set by the app
         self.config = lambda: {}        # the live settings
         self.frame = lambda: None       # a picture from the camera, or None
-        self.facts = lambda config: []  # the app's lines of context (time, weather, GPS, presence…)
+        self.facts = lambda config: []  # the app's lines of context (time, weather, presence…)
         self.do = {}                    # action name -> callable(text) -> result text
         self.on_events = None           # (entries, frame) -> None: events from the agent's own looks
         self.look_fn = None             # (where) -> what it saw: turn the camera, look, describe
@@ -399,14 +399,23 @@ class Agent:
 
     @staticmethod
     def _friends_lines():
+        out = []
         try:
             from . import friends, mesh
             peers = friends.peers()
-            if not peers:
-                return []
-            return ["Other PiE-inks on the network: " + "; ".join(mesh.describe(p) for p in peers[:8])]
+            if peers:
+                out.append("The other rooms of the house (PiE-inks of theirs; you are the same one bot on each): "
+                           + "; ".join(mesh.describe(p) for p in peers[:8]))
         except Exception:
-            return []
+            pass
+        try:
+            from . import pitato
+            lines = pitato.PITATO.describe()                 # the handheld Pi, when it's about
+            if lines:
+                out.append("On the network too: " + "; ".join(lines[:3]))
+        except Exception:
+            pass
+        return out
 
     def _allowed(self):
         out = [a for a in ACTIONS if self.conf.get(f"can_{a}", DEFAULT_CAN.get(a, False))]
